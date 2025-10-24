@@ -19,6 +19,8 @@ test "configuration can be created with different values" {
         .hostname = "localhost",
         .webhook_url = null,
         .webhook_enabled = false,
+        .enable_dnsbl = false,
+        .enable_greylist = false,
     };
 
     // Test that defaults are reasonable
@@ -47,6 +49,8 @@ test "port number types" {
         .hostname = "localhost",
         .webhook_url = null,
         .webhook_enabled = false,
+        .enable_dnsbl = false,
+        .enable_greylist = false,
     };
 
     // Standard SMTP ports
@@ -67,6 +71,8 @@ test "port number types" {
         .hostname = "localhost",
         .webhook_url = null,
         .webhook_enabled = false,
+        .enable_dnsbl = false,
+        .enable_greylist = false,
     };
 
     try testing.expectEqual(@as(u16, 587), cfg2.port);
@@ -92,6 +98,8 @@ test "configuration struct fields exist" {
         .hostname = "localhost",
         .webhook_url = null,
         .webhook_enabled = false,
+        .enable_dnsbl = false,
+        .enable_greylist = false,
     };
     _ = allocator;
 
@@ -125,6 +133,8 @@ test "TLS configuration flags" {
         .hostname = "localhost",
         .webhook_url = null,
         .webhook_enabled = false,
+        .enable_dnsbl = false,
+        .enable_greylist = false,
     };
 
     try testing.expectEqual(true, cfg_tls_on.enable_tls);
@@ -144,6 +154,8 @@ test "TLS configuration flags" {
         .hostname = "localhost",
         .webhook_url = null,
         .webhook_enabled = false,
+        .enable_dnsbl = false,
+        .enable_greylist = false,
     };
 
     try testing.expectEqual(false, cfg_tls_off.enable_tls);
@@ -165,6 +177,8 @@ test "authentication configuration flags" {
         .hostname = "localhost",
         .webhook_url = null,
         .webhook_enabled = false,
+        .enable_dnsbl = false,
+        .enable_greylist = false,
     };
 
     try testing.expectEqual(true, cfg_auth_on.enable_auth);
@@ -184,6 +198,8 @@ test "authentication configuration flags" {
         .hostname = "localhost",
         .webhook_url = null,
         .webhook_enabled = false,
+        .enable_dnsbl = false,
+        .enable_greylist = false,
     };
 
     try testing.expectEqual(false, cfg_auth_off.enable_auth);

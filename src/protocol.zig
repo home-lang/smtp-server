@@ -304,7 +304,11 @@ pub const Session = struct {
         var ehlo_buf: [256]u8 = undefined;
         const ehlo_line = try std.fmt.bufPrint(&ehlo_buf, "250-{s}\r\n", .{self.config.hostname});
         _ = try self.conn_wrapper.write(ehlo_line);
-        _ = try self.conn_wrapper.write("250-SIZE 10485760\r\n");
+
+        // Advertise SIZE extension with max message size
+        const size_line = try std.fmt.bufPrint(&ehlo_buf, "250-SIZE {d}\r\n", .{self.config.max_message_size});
+        _ = try self.conn_wrapper.write(size_line);
+
         _ = try self.conn_wrapper.write("250-8BITMIME\r\n");
         _ = try self.conn_wrapper.write("250-PIPELINING\r\n");
 
@@ -332,11 +336,42 @@ pub const Session = struct {
         };
 
         const addr_part = line[from_start + 5 ..];
-        const addr = std.mem.trim(u8, addr_part, " \t<>");
+
+        // Parse address and optional SIZE parameter
+        // Format: MAIL FROM:<address> [SIZE=size]
+        var addr: []const u8 = undefined;
+        var declared_size: ?usize = null;
+
+        if (std.mem.indexOf(u8, addr_part, " SIZE=")) |size_pos| {
+            // SIZE parameter present
+            addr = std.mem.trim(u8, addr_part[0..size_pos], " \t<>");
+            const size_part = addr_part[size_pos + 6 ..];
+
+            // Parse size value
+            var size_end: usize = 0;
+            while (size_end < size_part.len and std.ascii.isDigit(size_part[size_end])) {
+                size_end += 1;
+            }
+
+            if (size_end > 0) {
+                declared_size = std.fmt.parseInt(usize, size_part[0..size_end], 10) catch null;
+            }
+        } else {
+            addr = std.mem.trim(u8, addr_part, " \t<>");
+        }
 
         if (addr.len == 0) {
             try self.sendResponse(writer, 501, "Invalid sender address", null);
             return;
+        }
+
+        // Validate declared size against max message size
+        if (declared_size) |size| {
+            if (size > self.config.max_message_size) {
+                try self.sendResponse(writer, 552, "Message size exceeds fixed maximum message size", null);
+                self.logger.logSecurityEvent(self.remote_addr, "Message size too large");
+                return;
+            }
         }
 
         if (self.mail_from) |old| {

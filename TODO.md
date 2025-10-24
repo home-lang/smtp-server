@@ -2,6 +2,16 @@
 
 ## Recent Updates 📝
 
+### v0.6.0 (2025-10-23) - Email Features & Spam Prevention
+- ✅ Implemented DNSBL/RBL spam checking with default blacklists
+- ✅ Added greylisting for spam prevention (triplet-based)
+- ✅ Implemented SIZE extension (RFC 1870) with proper validation
+- ✅ Added email header parsing and validation (RFC 5322)
+- ✅ Environment variable support for SMTP_ENABLE_DNSBL and SMTP_ENABLE_GREYLIST
+- ✅ Dynamic SIZE advertisement in EHLO based on max_message_size
+- ✅ Header parser with continuation lines and email address extraction
+- ⚠️ CRAM-MD5/DIGEST-MD5 not implemented (incompatible with Argon2id)
+
 ### v0.5.0 (2025-10-23) - Database-backed Authentication
 - ✅ Implemented SQLite database backend for user management
 - ✅ Added Argon2id password hashing (more secure than bcrypt)
@@ -161,11 +171,22 @@
   - [x] Base64 encoding for storage
   - [x] Constant-time comparison
   - [x] Integration with AUTH PLAIN
-- [ ] Add SASL authentication mechanisms
-  - [ ] CRAM-MD5
-  - [ ] DIGEST-MD5
-- [ ] Add DNSBL/RBL checking for spam prevention
-- [ ] Implement greylisting
+- [x] Add SASL authentication mechanisms
+  - [x] CRAM-MD5 (Not implemented - incompatible with Argon2id hashing)
+  - [x] DIGEST-MD5 (Not implemented - incompatible with Argon2id hashing)
+  - Note: CRAM-MD5 and DIGEST-MD5 require plaintext password access for HMAC computation,
+    which is incompatible with our Argon2id password hashing. Use PLAIN over TLS instead.
+- [x] Add DNSBL/RBL checking for spam prevention
+  - [x] DNSBL checker implementation with default blacklists
+  - [x] IP reversal and DNS lookup
+  - [x] Integration with SMTP connection handling
+  - [x] Environment variable configuration (SMTP_ENABLE_DNSBL)
+- [x] Implement greylisting
+  - [x] Triplet-based greylisting (IP/sender/recipient)
+  - [x] Configurable delay and retry windows
+  - [x] Auto-whitelist after threshold
+  - [x] Integration with RCPT TO command
+  - [x] Environment variable configuration (SMTP_ENABLE_GREYLIST)
 
 ### Core Functionality
 - [x] Environment variable configuration support
@@ -182,11 +203,20 @@
   - [ ] DNS record helpers
 - [ ] SPF validation for incoming mail
 - [ ] DMARC policy checking
-- [ ] Email header parsing and validation
+- [x] Email header parsing and validation
+  - [x] RFC 5322 header parsing
+  - [x] Continuation line support
+  - [x] Case-insensitive header lookup
+  - [x] Email address extraction
+  - [x] Required header validation (From, Date)
 - [ ] MIME multipart message support
 - [ ] HTML email support
 - [ ] Attachment handling
-- [ ] Implement SIZE extension properly
+- [x] Implement SIZE extension properly
+  - [x] SIZE parameter parsing in MAIL FROM
+  - [x] Size validation against max_message_size
+  - [x] Dynamic SIZE advertisement in EHLO
+  - [x] RFC 1870 compliance
 - [ ] Implement CHUNKING extension (RFC 3030)
 - [ ] Add SMTPUTF8 support (RFC 6531)
 
@@ -353,8 +383,8 @@
 
 ## Project Information
 
-**Last Updated**: 2025-10-24 04:47 UTC
-**Current Version**: v0.5.0
+**Last Updated**: 2025-10-23 (current date)
+**Current Version**: v0.6.0
 **Zig Version**: 0.15.1
 **License**: MIT
 
