@@ -4,6 +4,7 @@
 
 ### v0.11.0 (2025-10-23) - Advanced Features & Infrastructure
 - ✅ **Database Storage**: SQLite-based message storage with full-text search
+- ✅ **Time-Series Storage**: Date-based filesystem storage (year/month/day hierarchy)
 - ✅ **DELIVERBY Extension**: Time-constrained delivery (RFC 2852)
 - ✅ **ATRN Support**: Authenticated TURN for dial-up connections (RFC 2645)
 - ✅ **Kubernetes Manifests**: Production-ready K8s deployment
@@ -324,6 +325,19 @@
     - [x] Full-text search
     - [x] Message count queries
     - [x] Thread-safe operations
+  - [x] Time-series filesystem storage
+    - [x] Date-based directory hierarchy (year/month/day)
+    - [x] One file per email (.eml format)
+    - [x] Store/retrieve/delete operations
+    - [x] List messages by day or date range
+    - [x] Find message by ID (search recent days)
+    - [x] Archive old messages
+    - [x] Filename sanitization
+    - [x] Optional gzip compression
+    - [x] Storage statistics
+    - [x] Easy backup and archival
+    - [x] Grep-friendly plain text
+    - [x] Encryption-ready structure
   - [x] S3/object storage
     - [x] S3 key generation with date partitioning
     - [x] Store/retrieve/delete message operations
