@@ -1,0 +1,34 @@
+# Zig build artifacts
+zig-out/
+zig-cache/
+.zig-cache/
+
+# Mail storage
+mail/
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Editor specific
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# SSL certificates (never commit these)
+*.pem
+*.key
+*.crt
+*.csr
+
+# Configuration overrides
+config.local.zig
+
+# Test data
+test-emails/
+*.eml
