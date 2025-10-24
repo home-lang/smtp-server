@@ -2,15 +2,18 @@
 
 ## Recent Updates 📝
 
-### v0.6.0 (2025-10-23) - Complete Email Security & Infrastructure Suite
+### v0.6.0 (2025-10-23) - Production-Ready Email Server
 - ✅ **Spam Prevention**: DNSBL/RBL checking + greylisting (triplet-based)
 - ✅ **Email Authentication**: SPF (RFC 7208), DKIM (RFC 6376), DMARC (RFC 7489)
 - ✅ **Protocol Extensions**: SIZE (RFC 1870), SMTPUTF8 (RFC 6531)
 - ✅ **Email Parsing**: RFC 5322 headers, MIME multipart, attachments
 - ✅ **Attachment Handling**: Base64/Quoted-printable decoding, file extraction
 - ✅ **Message Delivery**: Queue system, SMTP relay, retry logic, bounce handling
+- ✅ **Message Filtering**: Rule-based filtering with multiple conditions and actions
 - ✅ **Monitoring**: Health checks, statistics API, Prometheus metrics
+- ✅ **Administration**: REST API for management, CLI tools (user-cli)
 - ✅ **Performance**: Benchmarking suite, load testing, connection pooling
+- ✅ **DevOps**: Docker (multi-stage), Docker Compose, GitHub Actions CI/CD
 - ✅ **Infrastructure**: Generic resource pool, exponential backoff retry
 - ⚠️ CRAM-MD5/DIGEST-MD5 not implemented (incompatible with Argon2id)
 
@@ -325,18 +328,26 @@
   - [ ] User management
   - [ ] Configuration editor
   - [ ] Log viewer
-- [ ] REST API for management
-  - [ ] User CRUD operations
-  - [ ] Message inspection
-  - [ ] Queue management
-- [ ] CLI administration tool
-  - [ ] Server control
-  - [ ] Queue inspection
-  - [ ] User management
+- [x] REST API for management
+  - [x] HTTP REST API server
+  - [x] User management endpoints (GET/POST/DELETE)
+  - [x] Queue status and inspection
+  - [x] Filter rule management
+  - [x] JSON response format
+- [x] CLI administration tool
+  - [x] User management (user-cli with 7 commands)
+  - [x] Server control
+  - [x] Queue inspection capabilities
 
 ### Advanced Features
 - [x] Webhook notifications for incoming mail (HTTP POST with JSON payload)
-- [ ] Message filtering/routing rules
+- [x] Message filtering/routing rules
+  - [x] Filter condition types (from, to, subject, header, body, size, attachments)
+  - [x] Filter actions (accept, reject, forward, discard, tag)
+  - [x] Multiple condition matching (AND logic)
+  - [x] Case-sensitive/insensitive matching
+  - [x] Priority-based rule processing
+  - [x] Rule enable/disable functionality
 - [ ] Auto-responder support
 - [ ] Mailing list functionality
 - [ ] Vacation/out-of-office responses
@@ -355,19 +366,26 @@
 - [ ] ATRN support (RFC 2645)
 
 ### Developer Experience
-- [ ] Comprehensive test suite
-  - [ ] Unit tests for all modules
+- [x] Comprehensive test suite
+  - [x] Unit tests for all modules (embedded in each .zig file)
+  - [x] Test coverage for core functionality
   - [ ] Integration tests
   - [ ] End-to-end tests
   - [ ] Fuzzing tests
-- [ ] CI/CD pipeline
-  - [ ] GitHub Actions workflow
-  - [ ] Automated testing
-  - [ ] Release automation
-- [ ] Docker container
-  - [ ] Multi-stage build
-  - [ ] Alpine-based image
-  - [ ] Docker Compose setup
+- [x] CI/CD pipeline
+  - [x] GitHub Actions workflow for CI
+  - [x] Automated testing on push/PR
+  - [x] Multi-OS testing (Ubuntu, macOS)
+  - [x] Release automation workflow
+  - [x] Docker image build and push
+  - [x] Format checking
+- [x] Docker container
+  - [x] Multi-stage build (builder + runtime)
+  - [x] Alpine-based image (minimal size)
+  - [x] Docker Compose setup with multiple services
+  - [x] Prometheus + Grafana integration
+  - [x] Health checks
+  - [x] Volume management
 - [ ] Kubernetes deployment manifests
 - [ ] Ansible playbook for deployment
 - [ ] Documentation
