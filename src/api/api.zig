@@ -108,13 +108,51 @@ pub const APIServer = struct {
     }
 
     fn handleGetUsers(self: *APIServer, stream: std.net.Stream) !void {
-        // For now, return a simple JSON response
-        const json = "{\"users\":[],\"message\":\"User listing not yet implemented\"}";
+        // Query all users from the database
+        const query =
+            \\SELECT username, email, enabled, created_at, last_login
+            \\FROM users
+            \\ORDER BY username
+        ;
+
+        var stmt = try self.db.prepare(query);
+        defer stmt.finalize();
+
+        var json = std.ArrayList(u8).init(self.allocator);
+        defer json.deinit();
+
+        try json.appendSlice("{\"users\":[");
+
+        var first = true;
+        while (try stmt.step()) {
+            if (!first) try json.appendSlice(",");
+            first = false;
+
+            const username = stmt.columnText(0);
+            const email = stmt.columnText(1);
+            const enabled = stmt.columnInt64(2);
+            const created_at = stmt.columnInt64(3);
+            const last_login = stmt.columnInt64(4);
+
+            try std.fmt.format(json.writer(),
+                \\{{"username":"{s}","email":"{s}","enabled":{},"created_at":{},"last_login":{}}}
+            , .{
+                username,
+                email,
+                enabled == 1,
+                created_at,
+                last_login,
+            });
+        }
+
+        try json.appendSlice("],\"count\":");
+        try std.fmt.format(json.writer(), "{d}", .{if (first) 0 else 1});
+        try json.appendSlice("}");
 
         const response = try std.fmt.allocPrint(
             self.allocator,
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {d}\r\n\r\n{s}",
-            .{ json.len, json },
+            .{ json.items.len, json.items },
         );
         defer self.allocator.free(response);
 
@@ -172,14 +210,55 @@ pub const APIServer = struct {
     }
 
     fn handleCreateUser(self: *APIServer, stream: std.net.Stream, request: []const u8) !void {
-        _ = request;
+        // Find the JSON body (after \r\n\r\n)
+        const body_start = std.mem.indexOf(u8, request, "\r\n\r\n") orelse {
+            return self.sendError(stream, 400, "No request body found");
+        };
 
-        // Parse JSON body (simplified - would need proper JSON parser)
-        const json = "{\"message\":\"User creation requires JSON body with username, password, email\"}";
+        const body = request[body_start + 4 ..];
+        if (body.len == 0) {
+            return self.sendError(stream, 400, "Empty request body");
+        }
+
+        // Simple JSON parsing for username, password, and email
+        const username = self.extractJsonField(body, "username") catch {
+            return self.sendError(stream, 400, "Missing or invalid username field");
+        };
+        const password = self.extractJsonField(body, "password") catch {
+            return self.sendError(stream, 400, "Missing or invalid password field");
+        };
+        const email = self.extractJsonField(body, "email") catch {
+            return self.sendError(stream, 400, "Missing or invalid email field");
+        };
+
+        // Validate inputs
+        if (username.len < 3) {
+            return self.sendError(stream, 400, "Username must be at least 3 characters");
+        }
+        if (password.len < 8) {
+            return self.sendError(stream, 400, "Password must be at least 8 characters");
+        }
+
+        // Create user in database
+        self.auth_backend.createUser(username, email, password) catch |err| {
+            if (err == error.UserExists) {
+                return self.sendError(stream, 409, "User already exists");
+            }
+            return self.sendError(stream, 500, "Failed to create user");
+        };
+
+        // Return success response
+        const json = try std.fmt.allocPrint(
+            self.allocator,
+            \\{{"message":"User created successfully","username":"{s}","email":"{s}"}}
+        ,
+            .{ username, email },
+        );
+        defer self.allocator.free(json);
 
         const response = try std.fmt.allocPrint(
             self.allocator,
-            "HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nContent-Length: {d}\r\n\r\n{s}",
+            "HTTP/1.1 201 Created\r\nContent-Type: application/json\r\nContent-Length: {d}\r\n\r\n{s}",
             .{ json.len, json },
         );
         defer self.allocator.free(response);
@@ -203,9 +282,38 @@ pub const APIServer = struct {
     }
 
     fn handleDeleteUser(self: *APIServer, stream: std.net.Stream, path: []const u8) !void {
-        _ = path;
+        // Extract username from path: /api/users/{username}
+        const prefix = "/api/users/";
+        if (!std.mem.startsWith(u8, path, prefix)) {
+            return self.sendError(stream, 400, "Invalid path format");
+        }
 
-        const json = "{\"message\":\"User deleted\"}";
+        var username = path[prefix.len..];
+
+        // Remove query string if present
+        if (std.mem.indexOf(u8, username, "?")) |idx| {
+            username = username[0..idx];
+        }
+
+        if (username.len == 0) {
+            return self.sendError(stream, 400, "Username is required");
+        }
+
+        // Delete user from database
+        self.db.deleteUser(username) catch |err| {
+            if (err == error.UserNotFound) {
+                return self.sendError(stream, 404, "User not found");
+            }
+            return self.sendError(stream, 500, "Failed to delete user");
+        };
+
+        const json = try std.fmt.allocPrint(
+            self.allocator,
+            \\{{"message":"User deleted successfully","username":"{s}"}}
+        ,
+            .{username},
+        );
+        defer self.allocator.free(json);
 
         const response = try std.fmt.allocPrint(
             self.allocator,
@@ -451,6 +559,56 @@ pub const APIServer = struct {
         }
 
         return decoded.toOwnedSlice();
+    }
+
+    /// Send error response with custom status code and message
+    fn sendError(self: *APIServer, stream: std.net.Stream, status_code: u16, message: []const u8) !void {
+        const status_text = switch (status_code) {
+            400 => "Bad Request",
+            404 => "Not Found",
+            409 => "Conflict",
+            500 => "Internal Server Error",
+            503 => "Service Unavailable",
+            else => "Error",
+        };
+
+        const json = try std.fmt.allocPrint(
+            self.allocator,
+            "{{\"error\":\"{s}\"}}",
+            .{message},
+        );
+        defer self.allocator.free(json);
+
+        const response = try std.fmt.allocPrint(
+            self.allocator,
+            "HTTP/1.1 {d} {s}\r\nContent-Type: application/json\r\nContent-Length: {d}\r\n\r\n{s}",
+            .{ status_code, status_text, json.len, json },
+        );
+        defer self.allocator.free(response);
+
+        _ = try stream.write(response);
+    }
+
+    /// Extract JSON field value (simple parser for {"key":"value"} format)
+    fn extractJsonField(self: *APIServer, json: []const u8, field: []const u8) ![]const u8 {
+        // Find "field":
+        const field_pattern = try std.fmt.allocPrint(self.allocator, "\"{s}\":", .{field});
+        defer self.allocator.free(field_pattern);
+
+        const field_start = std.mem.indexOf(u8, json, field_pattern) orelse return error.FieldNotFound;
+        const value_start_quote = std.mem.indexOfPos(u8, json, field_start, "\"") orelse return error.InvalidFormat;
+        const value_start = value_start_quote + 1;
+
+        // Find the closing quote, handling escaped quotes
+        var i = value_start;
+        while (i < json.len) : (i += 1) {
+            if (json[i] == '"' and (i == value_start or json[i - 1] != '\\')) {
+                const value = json[value_start..i];
+                return try self.allocator.dupe(u8, value);
+            }
+        }
+
+        return error.InvalidFormat;
     }
 
     fn send404(self: *APIServer, stream: std.net.Stream) !void {

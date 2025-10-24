@@ -2,6 +2,20 @@
 
 ## Recent Updates 📝
 
+### v0.24.0 (2025-10-24) - Code Organization & User Management API
+- ✅ **Major Code Reorganization**: Restructured flat 70-file codebase into 12 logical directories
+- ✅ **Improved Discoverability**: Grouped related functionality (core, protocol, auth, antispam, message, storage, delivery, features, api, observability, infrastructure, testing)
+- ✅ **User Management REST API**: Complete user management endpoints (GET, POST, DELETE)
+  - ✅ List all users with pagination support
+  - ✅ Create new users with validation
+  - ✅ Delete users by username
+  - ✅ JSON request/response handling
+  - ✅ Proper error responses with HTTP status codes
+- ✅ **Code Organization Documentation**: Comprehensive docs/CODE_ORGANIZATION.md
+- ✅ **Import Path Updates**: All 70 files updated with correct import paths
+- ✅ **Migration Scripts**: Created 3 scripts for import path management
+- ✅ **Build Verification**: All builds and tests passing after reorganization
+
 ### v0.23.0 (2025-10-24) - OpenTelemetry Tracing & Observability
 - ✅ **OpenTelemetry Tracing**: W3C trace context propagation for distributed tracing
 - ✅ **Trace Spans**: Support for span creation, attributes, events, and lifecycle management
@@ -301,7 +315,8 @@
     - [x] Connection pooling
     - [x] Quota and attachment limit support
     - [x] Auto-updating timestamps
-  - [ ] User management API (REST/GraphQL)
+  - [x] User management API (REST) - completed in v0.24.0
+  - [ ] User management API (GraphQL) - deferred
 - [x] Implement password hashing with Argon2id
   - [x] Argon2id implementation (more secure than bcrypt)
   - [x] Base64 encoding for storage
@@ -986,7 +1001,7 @@
 ## Project Information
 
 **Last Updated**: 2025-10-24
-**Current Version**: v0.23.0
+**Current Version**: v0.24.0
 **Zig Version**: 0.15.1
 **License**: MIT
 
