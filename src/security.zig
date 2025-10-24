@@ -6,6 +6,8 @@ pub const RateLimiter = struct {
     window_seconds: u64,
     max_requests: u32,
     mutex: std.Thread.Mutex,
+    cleanup_thread: ?std.Thread,
+    should_stop: std.atomic.Value(bool),
 
     const RateCounter = struct {
         count: u32,
@@ -20,10 +22,53 @@ pub const RateLimiter = struct {
             .window_seconds = window_seconds,
             .max_requests = max_requests,
             .mutex = std.Thread.Mutex{},
+            .cleanup_thread = null,
+            .should_stop = std.atomic.Value(bool).init(false),
         };
     }
 
+    /// Start automatic cleanup in background thread
+    pub fn startAutomaticCleanup(self: *RateLimiter) !void {
+        if (self.cleanup_thread != null) {
+            return error.CleanupAlreadyRunning;
+        }
+
+        self.should_stop.store(false, .monotonic);
+        self.cleanup_thread = try std.Thread.spawn(.{}, cleanupWorker, .{self});
+    }
+
+    /// Stop automatic cleanup
+    pub fn stopAutomaticCleanup(self: *RateLimiter) void {
+        if (self.cleanup_thread) |thread| {
+            self.should_stop.store(true, .monotonic);
+            thread.join();
+            self.cleanup_thread = null;
+        }
+    }
+
+    fn cleanupWorker(self: *RateLimiter) void {
+        // Run cleanup every hour
+        const cleanup_interval_ns = 3600 * std.time.ns_per_s;
+
+        while (!self.should_stop.load(.monotonic)) {
+            // Sleep in smaller intervals to allow quick shutdown
+            var remaining = cleanup_interval_ns;
+            while (remaining > 0 and !self.should_stop.load(.monotonic)) {
+                const sleep_time = @min(remaining, 10 * std.time.ns_per_s);
+                std.time.sleep(sleep_time);
+                remaining -= sleep_time;
+            }
+
+            if (!self.should_stop.load(.monotonic)) {
+                self.cleanup();
+            }
+        }
+    }
+
     pub fn deinit(self: *RateLimiter) void {
+        // Stop cleanup thread if running
+        self.stopAutomaticCleanup();
+
         var it = self.ip_counters.iterator();
         while (it.next()) |entry| {
             self.allocator.free(entry.key_ptr.*);
@@ -93,26 +138,28 @@ pub const RateLimiter = struct {
         return self.max_requests;
     }
 
+    /// Clean up old rate limit entries (call periodically)
     pub fn cleanup(self: *RateLimiter) void {
         self.mutex.lock();
         defer self.mutex.unlock();
 
         const now = std.time.timestamp();
-        var to_remove = std.ArrayList([]const u8){};
-        defer to_remove.deinit(self.allocator);
+        var to_remove = std.ArrayList([]const u8).init(self.allocator);
+        defer to_remove.deinit();
 
         var it = self.ip_counters.iterator();
         while (it.next()) |entry| {
             const elapsed = now - entry.value_ptr.last_request;
             // Remove entries that haven't been accessed in 2x the window time
-            if (elapsed >= self.window_seconds * 2) {
-                to_remove.append(self.allocator, entry.key_ptr.*) catch continue;
+            if (elapsed >= @as(i64, @intCast(self.window_seconds * 2))) {
+                to_remove.append(entry.key_ptr.*) catch continue;
             }
         }
 
         for (to_remove.items) |key| {
-            _ = self.ip_counters.remove(key);
-            self.allocator.free(key);
+            if (self.ip_counters.fetchRemove(key)) |removed| {
+                self.allocator.free(removed.key);
+            }
         }
     }
 

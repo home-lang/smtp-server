@@ -2,6 +2,10 @@
 
 ## Recent Updates 📝
 
+### v0.18.0 (2025-10-24) - Bug Fixes & Issue Documentation
+- ✅ **Rate Limiter Cleanup**: Automatic background cleanup with scheduled thread
+- ✅ **Known Issues Documentation**: Comprehensive documentation of all known issues with solutions
+
 ### v0.17.0 (2025-10-24) - RFC & Legal Compliance
 - ✅ **RFC 5321 Compliance Testing**: 30+ tests covering SMTP protocol
 - ✅ **RFC 5322 Compliance Testing**: Message format validation
@@ -903,7 +907,7 @@
 ### High Priority
 - [ ] Need to verify thread safety of all shared resources
 - [x] ~~Authentication accepts any credentials (development mode)~~ (Fixed: now uses database with Argon2id)
-- [ ] Rate limiter cleanup not scheduled
+- [x] ~~Rate limiter cleanup not scheduled~~ (Fixed in v0.18.0: automatic background cleanup)
 
 ### Medium Priority
 - [x] ~~No connection timeout enforcement yet~~ (Fixed in 0.2.0)
