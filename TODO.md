@@ -2,6 +2,14 @@
 
 ## Recent Updates 📝
 
+### v0.13.0 (2025-10-23) - Multi-Platform Support
+- ✅ **Windows Support**: Full Windows compatibility with service management
+- ✅ **BSD Support**: FreeBSD and OpenBSD support with rc.d integration
+- ✅ **ARM Architecture**: Native ARM64 and ARM32 support
+- ✅ **Unix Domain Sockets**: Stream and datagram sockets with abstract namespace
+- ✅ **Cross-Platform Build System**: Build for all platforms from any platform
+- ✅ **Platform Abstraction Layer**: Unified API across all platforms
+
 ### v0.12.0 (2025-10-23) - Enterprise Features & Automation
 - ✅ **Encrypted Storage**: AES-256-GCM encryption at rest with key rotation
 - ✅ **Backup/Restore**: Full and incremental backups with verification
@@ -646,11 +654,38 @@
   - [ ] Performance tuning guide
 
 ### Multi-Platform Support
-- [ ] Windows support
-- [ ] BSD support (FreeBSD, OpenBSD)
-- [ ] ARM architecture support
+- [x] Windows support
+  - [x] Platform detection and abstraction layer
+  - [x] Windows service management (sc.exe integration)
+  - [x] Path handling (backslash separators)
+  - [x] Winsock2 networking (ws2_32)
+  - [x] Windows-specific libraries (advapi32)
+  - [x] Cross-compilation support
+- [x] BSD support (FreeBSD, OpenBSD)
+  - [x] FreeBSD platform detection
+  - [x] OpenBSD platform detection
+  - [x] rc.d service script generation
+  - [x] BSD-specific signal handling
+  - [x] Cross-compilation support
+- [x] ARM architecture support
+  - [x] ARM64 (aarch64) support
+  - [x] ARM32 support
+  - [x] Architecture detection
+  - [x] Cross-compilation for ARM targets
 - [x] IPv6 support (full dual-stack support)
-- [ ] Unix socket support
+- [x] Unix socket support
+  - [x] Stream sockets (SOCK_STREAM)
+  - [x] Datagram sockets (SOCK_DGRAM)
+  - [x] Abstract namespace (Linux)
+  - [x] File permissions handling
+  - [x] Non-blocking I/O
+  - [x] Socket cleanup
+  - [x] Path length validation
+- [x] Cross-platform build system
+  - [x] Build for all platforms from any platform
+  - [x] Platform-specific library linking
+  - [x] Build script for automated builds
+  - [x] Comprehensive cross-platform documentation
 
 ### Compliance & Standards
 - [ ] Full RFC 5321 compliance testing
