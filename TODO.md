@@ -2,24 +2,16 @@
 
 ## Recent Updates 📝
 
-### v0.6.0 (2025-10-23) - Email Features, Spam Prevention & Infrastructure
-- ✅ Implemented DNSBL/RBL spam checking with default blacklists
-- ✅ Added greylisting for spam prevention (triplet-based)
-- ✅ Implemented SIZE extension (RFC 1870) with proper validation
-- ✅ Added email header parsing and validation (RFC 5322)
-- ✅ MIME multipart message support with boundary parsing
-- ✅ SMTPUTF8 support (RFC 6531) for internationalized email addresses
-- ✅ Message queue system with retry logic and exponential backoff
-- ✅ SMTP relay client for forwarding messages
-- ✅ Bounce message generator (RFC 3464 - DSN)
-- ✅ Health check endpoint with JSON status API
-- ✅ Statistics API for monitoring
-- ✅ Prometheus metrics exporter (/metrics endpoint)
-- ✅ Performance benchmarking suite
-- ✅ Load testing tools
-- ✅ Environment variable support for SMTP_ENABLE_DNSBL and SMTP_ENABLE_GREYLIST
-- ✅ Dynamic SIZE advertisement in EHLO based on max_message_size
-- ✅ Header parser with continuation lines and email address extraction
+### v0.6.0 (2025-10-23) - Complete Email Security & Infrastructure Suite
+- ✅ **Spam Prevention**: DNSBL/RBL checking + greylisting (triplet-based)
+- ✅ **Email Authentication**: SPF (RFC 7208), DKIM (RFC 6376), DMARC (RFC 7489)
+- ✅ **Protocol Extensions**: SIZE (RFC 1870), SMTPUTF8 (RFC 6531)
+- ✅ **Email Parsing**: RFC 5322 headers, MIME multipart, attachments
+- ✅ **Attachment Handling**: Base64/Quoted-printable decoding, file extraction
+- ✅ **Message Delivery**: Queue system, SMTP relay, retry logic, bounce handling
+- ✅ **Monitoring**: Health checks, statistics API, Prometheus metrics
+- ✅ **Performance**: Benchmarking suite, load testing, connection pooling
+- ✅ **Infrastructure**: Generic resource pool, exponential backoff retry
 - ⚠️ CRAM-MD5/DIGEST-MD5 not implemented (incompatible with Argon2id)
 
 ### v0.5.0 (2025-10-23) - Database-backed Authentication
@@ -207,12 +199,25 @@
 ## Medium Priority 🟡
 
 ### Email Features
-- [ ] DKIM signing support
-  - [ ] Key generation utilities
-  - [ ] Signature creation
-  - [ ] DNS record helpers
-- [ ] SPF validation for incoming mail
-- [ ] DMARC policy checking
+- [x] SPF validation for incoming mail (RFC 7208)
+  - [x] SPF record parsing and evaluation
+  - [x] IPv4/IPv6 CIDR matching
+  - [x] Mechanism evaluation (ip4, ip6, a, mx, include, all)
+  - [x] Result qualifiers (+, -, ~, ?)
+  - [x] SPF record builder for publishing
+- [x] DKIM signature validation (RFC 6376)
+  - [x] DKIM-Signature header parsing
+  - [x] Tag-value pair extraction
+  - [x] Public key query framework (DNS TXT)
+  - [x] Body hash verification framework
+  - [x] RSA signature verification framework
+  - [x] DKIM signer for outgoing mail
+- [x] DMARC policy checking (RFC 7489)
+  - [x] DMARC record parsing
+  - [x] Policy evaluation (none, quarantine, reject)
+  - [x] SPF/DKIM identifier alignment (strict/relaxed)
+  - [x] Aggregate report generation (XML)
+  - [x] Organizational domain extraction
 - [x] Email header parsing and validation
   - [x] RFC 5322 header parsing
   - [x] Continuation line support
@@ -225,7 +230,13 @@
   - [x] MIME part extraction with headers
   - [x] Comprehensive test coverage
 - [ ] HTML email support
-- [ ] Attachment handling (base64 decoding, etc.)
+- [x] Attachment handling
+  - [x] Attachment extraction from MIME parts
+  - [x] Base64 decoding
+  - [x] Quoted-printable decoding
+  - [x] Filename and content-type extraction
+  - [x] Save to file functionality
+  - [x] Multiple encoding support (7bit, 8bit, binary)
 - [x] Implement SIZE extension properly
   - [x] SIZE parameter parsing in MAIL FROM
   - [x] Size validation against max_message_size
@@ -265,7 +276,12 @@
 - [ ] Delivery status notifications (DSN) - full implementation
 
 ### Performance
-- [ ] Connection pooling
+- [x] Connection pooling
+  - [x] SMTP relay connection pool
+  - [x] Idle timeout management
+  - [x] Automatic cleanup of stale connections
+  - [x] Pool statistics and monitoring
+  - [x] Generic resource pool implementation
 - [ ] Memory pool for allocations
 - [ ] Zero-copy buffer management
 - [ ] Async I/O with io_uring (Linux)
