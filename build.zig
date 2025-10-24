@@ -144,6 +144,12 @@ pub fn build(b: *std.Build) void {
         "src/config_test.zig",
     };
 
+    // RFC compliance tests
+    const rfc_compliance_tests = [_][]const u8{
+        "tests/rfc5321_compliance_test.zig",
+        "tests/rfc5322_compliance_test.zig",
+    };
+
     for (test_files) |test_file| {
         const test_module = b.createModule(.{
             .root_source_file = b.path(test_file),
@@ -158,6 +164,23 @@ pub fn build(b: *std.Build) void {
 
         const run_unit_tests = b.addRunArtifact(unit_tests);
         test_step.dependOn(&run_unit_tests.step);
+    }
+
+    // RFC compliance tests
+    const rfc_test_step = b.step("test-rfc", "Run RFC compliance tests");
+    for (rfc_compliance_tests) |test_file| {
+        const test_module = b.createModule(.{
+            .root_source_file = b.path(test_file),
+            .target = target,
+            .optimize = optimize,
+        });
+
+        const compliance_tests = b.addTest(.{
+            .root_module = test_module,
+        });
+
+        const run_compliance_tests = b.addRunArtifact(compliance_tests);
+        rfc_test_step.dependOn(&run_compliance_tests.step);
     }
 
     // End-to-end tests
@@ -187,8 +210,9 @@ pub fn build(b: *std.Build) void {
     fuzz_step.dependOn(&run_fuzz_tests.step);
 
     // All tests step
-    const test_all_step = b.step("test-all", "Run all tests (unit + e2e + fuzz)");
+    const test_all_step = b.step("test-all", "Run all tests (unit + rfc + e2e + fuzz)");
     test_all_step.dependOn(test_step);
+    test_all_step.dependOn(rfc_test_step);
     test_all_step.dependOn(e2e_step);
     test_all_step.dependOn(fuzz_step);
 

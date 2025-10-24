@@ -2,6 +2,12 @@
 
 ## Recent Updates 📝
 
+### v0.17.0 (2025-10-24) - RFC & Legal Compliance
+- ✅ **RFC 5321 Compliance Testing**: 30+ tests covering SMTP protocol
+- ✅ **RFC 5322 Compliance Testing**: Message format validation
+- ✅ **RFC 6409 Message Submission**: MSA with automatic header fixing
+- ✅ **CAN-SPAM Compliance**: Validation, unsubscribe management, automatic compliance
+
 ### v0.16.0 (2025-10-24) - Complete Documentation Suite
 - ✅ **Architecture Documentation**: Comprehensive system architecture with diagrams
 - ✅ **Deployment Guides**: Complete deployment instructions for all platforms
@@ -794,10 +800,32 @@
   - [x] Comprehensive cross-platform documentation
 
 ### Compliance & Standards
-- [ ] Full RFC 5321 compliance testing
-- [ ] RFC 5322 message format compliance
-- [ ] RFC 6409 message submission support
-- [ ] CAN-SPAM compliance features
+- [x] Full RFC 5321 compliance testing
+  - [x] Comprehensive test suite (30+ tests)
+  - [x] Session initiation tests
+  - [x] Command syntax tests
+  - [x] Reply code validation
+  - [x] Complete mail transaction tests
+- [x] RFC 5322 message format compliance
+  - [x] Header format validation
+  - [x] Address specification tests
+  - [x] Required fields validation
+  - [x] Date format compliance
+  - [x] MIME header support
+- [x] RFC 6409 message submission support
+  - [x] Message Submission Agent implementation
+  - [x] Automatic header addition (Message-ID, Date, Sender)
+  - [x] Received header generation
+  - [x] From/Sender validation
+  - [x] Authentication enforcement
+  - [x] Comprehensive documentation
+- [x] CAN-SPAM compliance features
+  - [x] Message validation system
+  - [x] Unsubscribe link generation
+  - [x] Physical address requirement
+  - [x] From header validation
+  - [x] Unsubscribe list management
+  - [x] Automatic compliance element addition
 - [x] GDPR compliance features
   - [x] Data export (Article 15 & 20)
     - [x] Complete user data export
