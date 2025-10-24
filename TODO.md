@@ -2,6 +2,13 @@
 
 ## Recent Updates 📝
 
+### v0.12.0 (2025-10-23) - Enterprise Features & Automation
+- ✅ **Encrypted Storage**: AES-256-GCM encryption at rest with key rotation
+- ✅ **Backup/Restore**: Full and incremental backups with verification
+- ✅ **Ansible Automation**: Complete deployment and configuration management
+- ✅ **GDPR Compliance**: Data export, deletion, and audit logging (framework)
+- ✅ **HA Cluster Mode**: Distributed deployment with load balancing (framework)
+
 ### v0.11.0 (2025-10-23) - Advanced Features & Infrastructure
 - ✅ **Database Storage**: SQLite-based message storage with full-text search
 - ✅ **Time-Series Storage**: Date-based filesystem storage (year/month/day hierarchy)
@@ -617,7 +624,20 @@
   - [x] ServiceMonitor for Prometheus
   - [x] Kustomization file
   - [x] Comprehensive documentation
-- [ ] Ansible playbook for deployment
+- [x] Ansible playbook for deployment
+  - [x] Complete role structure with all tasks
+  - [x] Production and staging inventories
+  - [x] Prerequisites installation (packages, directories)
+  - [x] User and group management
+  - [x] Binary installation and updates
+  - [x] Configuration templates (env, systemd, logrotate)
+  - [x] TLS certificate generation and management
+  - [x] Database setup and integrity checks
+  - [x] Firewall configuration (UFW/firewalld)
+  - [x] Backup scripts and scheduling
+  - [x] Monitoring setup (health checks, Prometheus)
+  - [x] Service management with systemd
+  - [x] Comprehensive documentation
 - [ ] Documentation
   - [ ] API documentation
   - [ ] Architecture diagrams
@@ -645,12 +665,34 @@
 ## Future Ideas 💡
 
 - [ ] Machine learning spam detection
-- [ ] Encrypted email storage at rest
+- [x] Encrypted email storage at rest
+  - [x] AES-256-GCM authenticated encryption
+  - [x] Per-message unique nonces
+  - [x] Key derivation from master key (HKDF)
+  - [x] Password-based key derivation (Argon2id)
+  - [x] Encrypted time-series storage wrapper
+  - [x] Message encryption/decryption
+  - [x] Serialization format with version/nonce/tag
+  - [x] Key rotation support
+  - [x] Secure key management
+  - [x] Comprehensive test coverage
 - [ ] Multi-tenancy support
 - [ ] Cluster mode for high availability
 - [ ] Message search functionality (full-text)
 - [ ] Email archiving
-- [ ] Backup and restore utilities
+- [x] Backup and restore utilities
+  - [x] Full backup creation
+  - [x] Incremental backup support
+  - [x] Differential backup (framework)
+  - [x] Compression support (gzip, zstd)
+  - [x] Encryption support
+  - [x] Checksum verification (SHA-256)
+  - [x] Backup metadata tracking
+  - [x] Restore with verification
+  - [x] Backup listing and management
+  - [x] Retention policy and pruning
+  - [x] Automated backup scheduling
+  - [x] Comprehensive test coverage
 - [ ] Migration tools from other servers
 - [ ] Plugin system for extensibility
 - [ ] GraphQL API
@@ -696,7 +738,7 @@
 ## Project Information
 
 **Last Updated**: 2025-10-23 (current date)
-**Current Version**: v0.11.0
+**Current Version**: v0.12.0
 **Zig Version**: 0.15.1
 **License**: MIT
 
