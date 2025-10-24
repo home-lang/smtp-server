@@ -311,6 +311,7 @@ pub const Session = struct {
 
         _ = try self.conn_wrapper.write("250-8BITMIME\r\n");
         _ = try self.conn_wrapper.write("250-PIPELINING\r\n");
+        _ = try self.conn_wrapper.write("250-SMTPUTF8\r\n");
 
         if (self.config.enable_auth) {
             _ = try self.conn_wrapper.write("250-AUTH PLAIN LOGIN\r\n");

@@ -2,11 +2,21 @@
 
 ## Recent Updates 📝
 
-### v0.6.0 (2025-10-23) - Email Features & Spam Prevention
+### v0.6.0 (2025-10-23) - Email Features, Spam Prevention & Infrastructure
 - ✅ Implemented DNSBL/RBL spam checking with default blacklists
 - ✅ Added greylisting for spam prevention (triplet-based)
 - ✅ Implemented SIZE extension (RFC 1870) with proper validation
 - ✅ Added email header parsing and validation (RFC 5322)
+- ✅ MIME multipart message support with boundary parsing
+- ✅ SMTPUTF8 support (RFC 6531) for internationalized email addresses
+- ✅ Message queue system with retry logic and exponential backoff
+- ✅ SMTP relay client for forwarding messages
+- ✅ Bounce message generator (RFC 3464 - DSN)
+- ✅ Health check endpoint with JSON status API
+- ✅ Statistics API for monitoring
+- ✅ Prometheus metrics exporter (/metrics endpoint)
+- ✅ Performance benchmarking suite
+- ✅ Load testing tools
 - ✅ Environment variable support for SMTP_ENABLE_DNSBL and SMTP_ENABLE_GREYLIST
 - ✅ Dynamic SIZE advertisement in EHLO based on max_message_size
 - ✅ Header parser with continuation lines and email address extraction
@@ -209,47 +219,85 @@
   - [x] Case-insensitive header lookup
   - [x] Email address extraction
   - [x] Required header validation (From, Date)
-- [ ] MIME multipart message support
+- [x] MIME multipart message support
+  - [x] ContentType parser with boundary/charset support
+  - [x] Multipart message parsing
+  - [x] MIME part extraction with headers
+  - [x] Comprehensive test coverage
 - [ ] HTML email support
-- [ ] Attachment handling
+- [ ] Attachment handling (base64 decoding, etc.)
 - [x] Implement SIZE extension properly
   - [x] SIZE parameter parsing in MAIL FROM
   - [x] Size validation against max_message_size
   - [x] Dynamic SIZE advertisement in EHLO
   - [x] RFC 1870 compliance
 - [ ] Implement CHUNKING extension (RFC 3030)
-- [ ] Add SMTPUTF8 support (RFC 6531)
+- [x] Add SMTPUTF8 support (RFC 6531)
+  - [x] SMTPUTF8 extension advertisement in EHLO
+  - [x] UTF-8 email address validation
+  - [x] Internationalized domain name support
+  - [x] UTF-8 local part validation
+  - [x] Detection of UTF-8 requirement
 
 ### Storage & Delivery
 - [ ] Pluggable storage backends
-  - [ ] Maildir (current)
+  - [x] Maildir (current)
   - [ ] mbox format
   - [ ] Database storage
   - [ ] S3/object storage
-- [ ] Message queue for outbound delivery
-- [ ] SMTP relay support (forward to other servers)
-- [ ] Retry logic for failed deliveries
-- [ ] Bounce message handling
-- [ ] Delivery status notifications (DSN)
+- [x] Message queue for outbound delivery
+  - [x] Queue management with status tracking
+  - [x] Priority and scheduling support
+  - [x] Queue statistics and monitoring
+- [x] SMTP relay support (forward to other servers)
+  - [x] SMTP relay client implementation
+  - [x] Connection pooling support
+  - [x] Relay worker for queue processing
+- [x] Retry logic for failed deliveries
+  - [x] Exponential backoff strategy
+  - [x] Configurable max retry attempts
+  - [x] Automatic retry scheduling
+- [x] Bounce message handling
+  - [x] RFC 3464 compliant DSN generation
+  - [x] Machine-readable delivery status
+  - [x] Original message inclusion
+  - [x] Multiple bounce reason types
+- [ ] Delivery status notifications (DSN) - full implementation
 
 ### Performance
 - [ ] Connection pooling
 - [ ] Memory pool for allocations
 - [ ] Zero-copy buffer management
 - [ ] Async I/O with io_uring (Linux)
-- [ ] Performance benchmarking suite
-- [ ] Load testing tools
-- [ ] Metrics collection (Prometheus format)
+- [x] Performance benchmarking suite
+  - [x] Benchmark framework with warmup
+  - [x] SMTP-specific benchmarks (email validation, base64, parsing)
+  - [x] Statistical analysis (min/max/avg, ops/sec)
+  - [x] Result reporting
+- [x] Load testing tools
+  - [x] Concurrent connection simulation
+  - [x] Configurable message volume
+  - [x] Throughput measurement
+  - [x] Error tracking and reporting
+- [x] Metrics collection (Prometheus format)
 
 ### Monitoring & Observability
-- [ ] Health check endpoint
-- [ ] Statistics API
-  - [ ] Messages received/sent
-  - [ ] Connection counts
-  - [ ] Error rates
-  - [ ] Queue sizes
-- [ ] Integration with monitoring systems
-  - [ ] Prometheus exporter
+- [x] Health check endpoint
+  - [x] HTTP health server on dedicated port
+  - [x] JSON status responses
+  - [x] Health status levels (healthy/degraded/unhealthy)
+  - [x] Uptime and connection metrics
+- [x] Statistics API
+  - [x] Messages received/sent
+  - [x] Connection counts (total/active)
+  - [x] Authentication successes/failures
+  - [x] Rate limit hits
+  - [x] DNSBL/greylist block counts
+  - [x] JSON API endpoint (/stats)
+- [x] Integration with monitoring systems
+  - [x] Prometheus exporter (/metrics endpoint)
+  - [x] Prometheus text format support
+  - [x] Counter and gauge metrics
   - [ ] StatsD support
   - [ ] OpenTelemetry traces
 
