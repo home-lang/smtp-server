@@ -95,8 +95,8 @@ pub const Session = struct {
     tls_input_buf: ?[]u8,
     tls_output_buf: ?[]u8,
     // Store the actual reader/writer structures info for proper cleanup
-    tls_reader_info: ?struct { ptr: *anyopaque, size: usize },
-    tls_writer_info: ?struct { ptr: *anyopaque, size: usize },
+    tls_reader_info: ?struct { ptr: *anyopaque, size: usize, alignment: u29 },
+    tls_writer_info: ?struct { ptr: *anyopaque, size: usize, alignment: u29 },
     // BDAT/CHUNKING support
     bdat_session: ?chunking.BDATSession,
     chunking_handler: chunking.ChunkingHandler,
@@ -156,14 +156,30 @@ pub const Session = struct {
             self.allocator.free(hostname);
         }
         self.conn_wrapper.deinitTls();
-        // Clean up TLS reader/writer - use properly aligned free
+        // Clean up TLS reader/writer - use stored alignment
         if (self.tls_reader_info) |info| {
-            const ptr_aligned: [*]align(@alignOf(*anyopaque)) u8 = @ptrCast(@alignCast(info.ptr));
-            self.allocator.free(ptr_aligned[0..info.size]);
+            const log2_align: std.mem.Alignment = @enumFromInt(std.math.log2(info.alignment));
+            const ptr_bytes: [*]u8 = @ptrCast(info.ptr);
+            switch (info.alignment) {
+                1 => self.allocator.rawFree(ptr_bytes[0..info.size], log2_align, @returnAddress()),
+                2 => self.allocator.rawFree(@as([*]align(2) u8, @ptrCast(@alignCast(ptr_bytes)))[0..info.size], log2_align, @returnAddress()),
+                4 => self.allocator.rawFree(@as([*]align(4) u8, @ptrCast(@alignCast(ptr_bytes)))[0..info.size], log2_align, @returnAddress()),
+                8 => self.allocator.rawFree(@as([*]align(8) u8, @ptrCast(@alignCast(ptr_bytes)))[0..info.size], log2_align, @returnAddress()),
+                16 => self.allocator.rawFree(@as([*]align(16) u8, @ptrCast(@alignCast(ptr_bytes)))[0..info.size], log2_align, @returnAddress()),
+                else => unreachable,
+            }
         }
         if (self.tls_writer_info) |info| {
-            const ptr_aligned: [*]align(@alignOf(*anyopaque)) u8 = @ptrCast(@alignCast(info.ptr));
-            self.allocator.free(ptr_aligned[0..info.size]);
+            const log2_align: std.mem.Alignment = @enumFromInt(std.math.log2(info.alignment));
+            const ptr_bytes: [*]u8 = @ptrCast(info.ptr);
+            switch (info.alignment) {
+                1 => self.allocator.rawFree(ptr_bytes[0..info.size], log2_align, @returnAddress()),
+                2 => self.allocator.rawFree(@as([*]align(2) u8, @ptrCast(@alignCast(ptr_bytes)))[0..info.size], log2_align, @returnAddress()),
+                4 => self.allocator.rawFree(@as([*]align(4) u8, @ptrCast(@alignCast(ptr_bytes)))[0..info.size], log2_align, @returnAddress()),
+                8 => self.allocator.rawFree(@as([*]align(8) u8, @ptrCast(@alignCast(ptr_bytes)))[0..info.size], log2_align, @returnAddress()),
+                16 => self.allocator.rawFree(@as([*]align(16) u8, @ptrCast(@alignCast(ptr_bytes)))[0..info.size], log2_align, @returnAddress()),
+                else => unreachable,
+            }
         }
         // Clean up TLS buffers
         if (self.tls_input_buf) |buf| {
@@ -874,8 +890,8 @@ pub const Session = struct {
         // Store everything in session for lifetime management
         self.tls_input_buf = input_buf;
         self.tls_output_buf = output_buf;
-        self.tls_reader_info = .{ .ptr = reader_ptr, .size = @sizeOf(ReaderType) };
-        self.tls_writer_info = .{ .ptr = writer_ptr, .size = @sizeOf(WriterType) };
+        self.tls_reader_info = .{ .ptr = reader_ptr, .size = @sizeOf(ReaderType), .alignment = @alignOf(ReaderType) };
+        self.tls_writer_info = .{ .ptr = writer_ptr, .size = @sizeOf(WriterType), .alignment = @alignOf(WriterType) };
 
         // Successfully upgraded to TLS - update the connection wrapper
         self.conn_wrapper.upgradeToTls(tls_mod.TlsConnection{ .conn = tls_conn });
