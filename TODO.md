@@ -2,6 +2,13 @@
 
 ## Recent Updates 📝
 
+### v0.9.0 (2025-10-23) - Performance & Scalability
+- ✅ **StatsD Support**: Real-time metrics reporting to StatsD servers
+- ✅ **Memory Pools**: Fixed-size block allocation, buffer pools, arena allocators
+- ✅ **Zero-Copy Buffers**: Ring buffers, buffer chains, scatter-gather I/O
+- ✅ **PostgreSQL Support**: Production-grade database backend alternative
+- ✅ **S3 Storage**: Scalable object storage for email messages
+
 ### v0.8.0 (2025-10-23) - Advanced Features & Optimizations
 - ✅ **Quota Management**: Per-user storage limits with caching
 - ✅ **Attachment Limits**: Per-user attachment size restrictions
@@ -183,7 +190,13 @@
 - [x] Database-backed authentication
   - [x] SQLite integration
   - [x] User management CLI tool (user-cli)
-  - [ ] PostgreSQL support
+  - [x] PostgreSQL support
+    - [x] Connection string parsing
+    - [x] Database schema with indexes and triggers
+    - [x] User CRUD operations interface
+    - [x] Connection pooling
+    - [x] Quota and attachment limit support
+    - [x] Auto-updating timestamps
   - [ ] User management API (REST/GraphQL)
 - [x] Implement password hashing with Argon2id
   - [x] Argon2id implementation (more secure than bcrypt)
@@ -280,7 +293,7 @@
   - [x] Detection of UTF-8 requirement
 
 ### Storage & Delivery
-- [ ] Pluggable storage backends
+- [x] Pluggable storage backends
   - [x] Maildir (current)
   - [x] mbox format (RFC 4155)
     - [x] Message appending with "From " separators
@@ -289,7 +302,15 @@
     - [x] "From " line escaping/unescaping
     - [x] Thread-safe operations
   - [ ] Database storage
-  - [ ] S3/object storage
+  - [x] S3/object storage
+    - [x] S3 key generation with date partitioning
+    - [x] Store/retrieve/delete message operations
+    - [x] List messages with prefix filtering
+    - [x] Presigned URL generation
+    - [x] Multipart upload support for large messages
+    - [x] Lifecycle policy XML generation
+    - [x] Object metadata retrieval
+    - [x] Message copy operations
 - [x] Message queue for outbound delivery
   - [x] Queue management with status tracking
   - [x] Priority and scheduling support
@@ -316,8 +337,20 @@
   - [x] Automatic cleanup of stale connections
   - [x] Pool statistics and monitoring
   - [x] Generic resource pool implementation
-- [ ] Memory pool for allocations
-- [ ] Zero-copy buffer management
+- [x] Memory pool for allocations
+  - [x] Generic memory pool for fixed-size blocks
+  - [x] Buffer pools for common sizes (1KB, 8KB, 64KB)
+  - [x] Arena allocator pool with reset capability
+  - [x] Pool statistics and monitoring
+  - [x] Automatic growth on exhaustion
+  - [x] Thread-safe operations
+- [x] Zero-copy buffer management
+  - [x] Zero-copy buffer with slice-based access
+  - [x] Ring buffer for continuous operations
+  - [x] Buffer chain for scatter-gather I/O
+  - [x] Peek and consume operations
+  - [x] Delimiter-based parsing (consumeUntil)
+  - [x] Buffer compaction
 - [ ] Async I/O with io_uring (Linux)
 - [x] Performance benchmarking suite
   - [x] Benchmark framework with warmup
@@ -348,7 +381,14 @@
   - [x] Prometheus exporter (/metrics endpoint)
   - [x] Prometheus text format support
   - [x] Counter and gauge metrics
-  - [ ] StatsD support
+  - [x] StatsD support
+    - [x] UDP-based metrics reporting
+    - [x] Counter, gauge, timing, histogram, set metrics
+    - [x] Sample rate support
+    - [x] Batch sending
+    - [x] Metric prefix configuration
+    - [x] SMTP-specific metric helpers
+    - [x] Enable/disable toggle
   - [ ] OpenTelemetry traces
 
 ## Low Priority 🟢
