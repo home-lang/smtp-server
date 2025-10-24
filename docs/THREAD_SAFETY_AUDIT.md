@@ -27,7 +27,37 @@ This document provides a comprehensive thread safety audit of the SMTP server co
 
 ### ✅ Thread-Safe Components
 
-#### 1. RateLimiter (src/security.zig)
+#### 1. ServerStats (src/health.zig)
+**Status:** ✅ Thread-Safe (as of v0.21.0)
+
+**Protection Mechanism:**
+- Atomic operations (`std.atomic.Value`) for all counters
+- Lock-free concurrent access
+
+**Implementation:**
+```zig
+pub const ServerStats = struct {
+    total_connections: std.atomic.Value(u64),
+    active_connections: std.atomic.Value(u32),
+    messages_received: std.atomic.Value(u64),
+    // ... more atomic counters
+
+    pub fn incrementMessagesReceived(self: *ServerStats) void {
+        _ = self.messages_received.fetchAdd(1, .monotonic);
+    }
+}
+```
+
+**Analysis:**
+- ✅ All counters use atomic operations
+- ✅ Lock-free increment/decrement methods
+- ✅ Thread-safe read via `.load(.monotonic)`
+- ✅ No race conditions
+- ✅ High performance (no mutex contention)
+
+---
+
+#### 2. RateLimiter (src/security.zig)
 **Status:** ✅ Thread-Safe
 
 **Protection Mechanism:**

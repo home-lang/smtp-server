@@ -1,17 +1,72 @@
 const std = @import("std");
 
-/// Server statistics
+/// Server statistics with thread-safe atomic counters
 pub const ServerStats = struct {
     uptime_seconds: i64,
-    total_connections: u64,
-    active_connections: u32,
-    messages_received: u64,
-    messages_rejected: u64,
-    auth_successes: u64,
-    auth_failures: u64,
-    rate_limit_hits: u64,
-    dnsbl_blocks: u64,
-    greylist_blocks: u64,
+    total_connections: std.atomic.Value(u64),
+    active_connections: std.atomic.Value(u32),
+    messages_received: std.atomic.Value(u64),
+    messages_rejected: std.atomic.Value(u64),
+    auth_successes: std.atomic.Value(u64),
+    auth_failures: std.atomic.Value(u64),
+    rate_limit_hits: std.atomic.Value(u64),
+    dnsbl_blocks: std.atomic.Value(u64),
+    greylist_blocks: std.atomic.Value(u64),
+
+    pub fn init() ServerStats {
+        return .{
+            .uptime_seconds = 0,
+            .total_connections = std.atomic.Value(u64).init(0),
+            .active_connections = std.atomic.Value(u32).init(0),
+            .messages_received = std.atomic.Value(u64).init(0),
+            .messages_rejected = std.atomic.Value(u64).init(0),
+            .auth_successes = std.atomic.Value(u64).init(0),
+            .auth_failures = std.atomic.Value(u64).init(0),
+            .rate_limit_hits = std.atomic.Value(u64).init(0),
+            .dnsbl_blocks = std.atomic.Value(u64).init(0),
+            .greylist_blocks = std.atomic.Value(u64).init(0),
+        };
+    }
+
+    pub fn incrementTotalConnections(self: *ServerStats) void {
+        _ = self.total_connections.fetchAdd(1, .monotonic);
+    }
+
+    pub fn incrementActiveConnections(self: *ServerStats) void {
+        _ = self.active_connections.fetchAdd(1, .monotonic);
+    }
+
+    pub fn decrementActiveConnections(self: *ServerStats) void {
+        _ = self.active_connections.fetchSub(1, .monotonic);
+    }
+
+    pub fn incrementMessagesReceived(self: *ServerStats) void {
+        _ = self.messages_received.fetchAdd(1, .monotonic);
+    }
+
+    pub fn incrementMessagesRejected(self: *ServerStats) void {
+        _ = self.messages_rejected.fetchAdd(1, .monotonic);
+    }
+
+    pub fn incrementAuthSuccesses(self: *ServerStats) void {
+        _ = self.auth_successes.fetchAdd(1, .monotonic);
+    }
+
+    pub fn incrementAuthFailures(self: *ServerStats) void {
+        _ = self.auth_failures.fetchAdd(1, .monotonic);
+    }
+
+    pub fn incrementRateLimitHits(self: *ServerStats) void {
+        _ = self.rate_limit_hits.fetchAdd(1, .monotonic);
+    }
+
+    pub fn incrementDnsblBlocks(self: *ServerStats) void {
+        _ = self.dnsbl_blocks.fetchAdd(1, .monotonic);
+    }
+
+    pub fn incrementGreylistBlocks(self: *ServerStats) void {
+        _ = self.greylist_blocks.fetchAdd(1, .monotonic);
+    }
 
     pub fn toJson(self: *const ServerStats, allocator: std.mem.Allocator) ![]const u8 {
         return try std.fmt.allocPrint(
@@ -20,15 +75,15 @@ pub const ServerStats = struct {
         ,
             .{
                 self.uptime_seconds,
-                self.total_connections,
-                self.active_connections,
-                self.messages_received,
-                self.messages_rejected,
-                self.auth_successes,
-                self.auth_failures,
-                self.rate_limit_hits,
-                self.dnsbl_blocks,
-                self.greylist_blocks,
+                self.total_connections.load(.monotonic),
+                self.active_connections.load(.monotonic),
+                self.messages_received.load(.monotonic),
+                self.messages_rejected.load(.monotonic),
+                self.auth_successes.load(.monotonic),
+                self.auth_failures.load(.monotonic),
+                self.rate_limit_hits.load(.monotonic),
+                self.dnsbl_blocks.load(.monotonic),
+                self.greylist_blocks.load(.monotonic),
             },
         );
     }
