@@ -2,6 +2,13 @@
 
 ## Recent Updates 📝
 
+### v0.8.0 (2025-10-23) - Advanced Features & Optimizations
+- ✅ **Quota Management**: Per-user storage limits with caching
+- ✅ **Attachment Limits**: Per-user attachment size restrictions
+- ✅ **SMTP PIPELINING**: Command batching optimization (RFC 2920)
+- ✅ **DSN Extension**: Delivery Status Notifications (RFC 3461)
+- ✅ **Mailing Lists**: Full mailing list management with RFC 2369 headers
+
 ### v0.7.0 (2025-10-23) - Enhanced Email Features
 - ✅ **HTML Email**: Text/HTML conversion, sanitization, multipart alternative
 - ✅ **Storage Formats**: Maildir + mbox (RFC 4155) support
@@ -380,7 +387,17 @@
   - [x] Auto-response tracking per sender
   - [x] RFC 3834 compliance (Auto-Submitted header)
   - [x] Skip automated senders (noreply@, mailer-daemon@, etc.)
-- [ ] Mailing list functionality
+- [x] Mailing list functionality
+  - [x] Mailing list creation and management
+  - [x] Subscriber management (subscribe/unsubscribe)
+  - [x] Post policy enforcement (anyone, subscribers-only, moderated)
+  - [x] RFC 2369 list headers (List-Id, List-Post, List-Help, etc.)
+  - [x] Subject prefix support
+  - [x] Subscriber status management (enable/disable)
+  - [x] Digest mode support
+  - [x] List settings configuration
+  - [x] Thread-safe operations
+  - [x] Mailing list manager for multiple lists
 - [ ] Virus scanning integration (ClamAV)
 - [ ] Spam filter integration (SpamAssassin)
 - [x] Content filtering
@@ -389,14 +406,40 @@
   - [x] Filter actions (accept, reject, forward, discard, tag)
   - [x] Priority-based rule evaluation
   - [x] Thread-safe rule management
-- [ ] Attachment size limits per user
-- [ ] Quota management
+- [x] Attachment size limits per user
+  - [x] Per-user attachment size configuration
+  - [x] Per-attachment and total size limits
+  - [x] Validation before message processing
+  - [x] Preset limit configurations (restricted, standard, generous)
+  - [x] Database integration
+- [x] Quota management
+  - [x] Per-user storage quota limits
+  - [x] Real-time quota checking
+  - [x] Usage tracking and reporting
+  - [x] Quota presets (100MB, 1GB, 5GB, 50GB, unlimited)
+  - [x] Cache system for performance
+  - [x] Over-quota detection and reporting
+  - [x] Database schema migration
 
 ### Protocol Extensions
-- [ ] SMTP PIPELINING optimization
+- [x] SMTP PIPELINING optimization (RFC 2920)
+  - [x] Command batching and parsing
+  - [x] Pipelinable command validation
+  - [x] Command sequence validation
+  - [x] Batch response generation
+  - [x] Pipeline statistics tracking
+  - [x] Maximum pipeline depth enforcement
 - [ ] BINARYMIME support (RFC 3030)
 - [ ] DELIVERBY extension (RFC 2852)
-- [ ] DSN extension (RFC 3461)
+- [x] DSN extension (RFC 3461)
+  - [x] MAIL FROM RET parameter (FULL/HDRS)
+  - [x] MAIL FROM ENVID parameter
+  - [x] RCPT TO NOTIFY parameter (NEVER/SUCCESS/FAILURE/DELAY)
+  - [x] RCPT TO ORCPT parameter
+  - [x] Success notification generation
+  - [x] Failure notification generation
+  - [x] Delay notification generation
+  - [x] RFC 3464 compliant DSN format
 - [ ] ETRN support (RFC 1985)
 - [ ] ATRN support (RFC 2645)
 

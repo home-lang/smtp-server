@@ -75,7 +75,11 @@ pub const Database = struct {
             \\    email TEXT UNIQUE NOT NULL,
             \\    enabled INTEGER DEFAULT 1,
             \\    created_at INTEGER NOT NULL,
-            \\    updated_at INTEGER NOT NULL
+            \\    updated_at INTEGER NOT NULL,
+            \\    quota_limit INTEGER DEFAULT 0,
+            \\    quota_used INTEGER DEFAULT 0,
+            \\    attachment_max_size INTEGER DEFAULT 0,
+            \\    attachment_max_total INTEGER DEFAULT 0
             \\);
             \\
             \\CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
@@ -83,6 +87,17 @@ pub const Database = struct {
         ;
 
         try self.exec(schema);
+
+        // Migration: Add quota and attachment limit columns to existing tables
+        const migration =
+            \\ALTER TABLE users ADD COLUMN quota_limit INTEGER DEFAULT 0;
+            \\ALTER TABLE users ADD COLUMN quota_used INTEGER DEFAULT 0;
+            \\ALTER TABLE users ADD COLUMN attachment_max_size INTEGER DEFAULT 0;
+            \\ALTER TABLE users ADD COLUMN attachment_max_total INTEGER DEFAULT 0;
+        ;
+
+        // Try to run migration, ignore errors if columns already exist
+        self.exec(migration) catch {};
     }
 
     fn exec(self: *Database, sql: []const u8) !void {
