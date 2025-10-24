@@ -26,8 +26,11 @@ pub const Config = struct {
     webhook_enabled: bool,
     enable_dnsbl: bool,
     enable_greylist: bool,
+    enable_tracing: bool,
+    tracing_service_name: []const u8,
 
     pub fn deinit(self: Config, allocator: std.mem.Allocator) void {
+        allocator.free(self.tracing_service_name);
         allocator.free(self.host);
         allocator.free(self.hostname);
         if (self.tls_cert_path) |path| allocator.free(path);
@@ -71,6 +74,8 @@ fn loadDefaults(allocator: std.mem.Allocator) !Config {
         .webhook_enabled = false,
         .enable_dnsbl = false, // Disabled by default for performance
         .enable_greylist = false, // Disabled by default
+        .enable_tracing = false, // Disabled by default
+        .tracing_service_name = try allocator.dupe(u8, "smtp-server"),
     };
 }
 
@@ -184,6 +189,17 @@ fn applyEnvironmentVariables(allocator: std.mem.Allocator, cfg: *Config) !void {
     // SMTP_RATE_LIMIT_CLEANUP_INTERVAL
     if (std.posix.getenv("SMTP_RATE_LIMIT_CLEANUP_INTERVAL")) |value| {
         cfg.rate_limit_cleanup_interval = std.fmt.parseInt(u64, value, 10) catch cfg.rate_limit_cleanup_interval;
+    }
+
+    // SMTP_ENABLE_TRACING
+    if (std.posix.getenv("SMTP_ENABLE_TRACING")) |value| {
+        cfg.enable_tracing = std.ascii.eqlIgnoreCase(value, "true") or std.ascii.eqlIgnoreCase(value, "1");
+    }
+
+    // SMTP_TRACING_SERVICE_NAME
+    if (std.posix.getenv("SMTP_TRACING_SERVICE_NAME")) |value| {
+        allocator.free(cfg.tracing_service_name);
+        cfg.tracing_service_name = try allocator.dupe(u8, value);
     }
 }
 

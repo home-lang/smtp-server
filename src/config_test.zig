@@ -26,6 +26,8 @@ test "configuration can be created with different values" {
         .webhook_enabled = false,
         .enable_dnsbl = false,
         .enable_greylist = false,
+        .enable_tracing = false,
+        .tracing_service_name = "smtp-server",
     };
 
     // Test that defaults are reasonable
@@ -61,6 +63,8 @@ test "port number types" {
         .webhook_enabled = false,
         .enable_dnsbl = false,
         .enable_greylist = false,
+        .enable_tracing = false,
+        .tracing_service_name = "smtp-server",
     };
 
     // Standard SMTP ports
@@ -88,6 +92,8 @@ test "port number types" {
         .webhook_enabled = false,
         .enable_dnsbl = false,
         .enable_greylist = false,
+        .enable_tracing = false,
+        .tracing_service_name = "smtp-server",
     };
 
     try testing.expectEqual(@as(u16, 587), cfg2.port);
@@ -120,6 +126,8 @@ test "configuration struct fields exist" {
         .webhook_enabled = false,
         .enable_dnsbl = false,
         .enable_greylist = false,
+        .enable_tracing = false,
+        .tracing_service_name = "smtp-server",
     };
     _ = allocator;
 
@@ -160,6 +168,8 @@ test "TLS configuration flags" {
         .webhook_enabled = false,
         .enable_dnsbl = false,
         .enable_greylist = false,
+        .enable_tracing = false,
+        .tracing_service_name = "smtp-server",
     };
 
     try testing.expectEqual(true, cfg_tls_on.enable_tls);
@@ -186,6 +196,8 @@ test "TLS configuration flags" {
         .webhook_enabled = false,
         .enable_dnsbl = false,
         .enable_greylist = false,
+        .enable_tracing = false,
+        .tracing_service_name = "smtp-server",
     };
 
     try testing.expectEqual(false, cfg_tls_off.enable_tls);
@@ -214,6 +226,8 @@ test "authentication configuration flags" {
         .webhook_enabled = false,
         .enable_dnsbl = false,
         .enable_greylist = false,
+        .enable_tracing = false,
+        .tracing_service_name = "smtp-server",
     };
 
     try testing.expectEqual(true, cfg_auth_on.enable_auth);
@@ -240,6 +254,8 @@ test "authentication configuration flags" {
         .webhook_enabled = false,
         .enable_dnsbl = false,
         .enable_greylist = false,
+        .enable_tracing = false,
+        .tracing_service_name = "smtp-server",
     };
 
     try testing.expectEqual(false, cfg_auth_off.enable_auth);

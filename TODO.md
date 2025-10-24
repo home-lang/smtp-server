@@ -2,6 +2,15 @@
 
 ## Recent Updates 📝
 
+### v0.23.0 (2025-10-24) - OpenTelemetry Tracing & Observability
+- ✅ **OpenTelemetry Tracing**: W3C trace context propagation for distributed tracing
+- ✅ **Trace Spans**: Support for span creation, attributes, events, and lifecycle management
+- ✅ **Span Types**: Server, client, internal, producer, consumer span kinds
+- ✅ **Console Exporter**: Built-in console exporter for development and testing
+- ✅ **Tracer API**: Simple tracer interface for creating and managing spans
+- ✅ **Configuration**: Environment variables for enabling/disabling tracing
+- ✅ **Service Name Configuration**: Customizable service name for trace identification
+
 ### v0.22.0 (2025-10-24) - Per-User Rate Limiting & Enhanced Configuration
 - ✅ **Per-User Rate Limiting**: Separate rate limits for authenticated users vs IP addresses
 - ✅ **Configurable Cleanup Interval**: Customizable rate limiter cleanup scheduling
@@ -512,7 +521,13 @@
     - [x] Metric prefix configuration
     - [x] SMTP-specific metric helpers
     - [x] Enable/disable toggle
-  - [ ] OpenTelemetry traces
+  - [x] OpenTelemetry traces
+    - [x] W3C trace context propagation
+    - [x] Span creation and management
+    - [x] Span attributes and events
+    - [x] Console exporter
+    - [x] Tracer API
+    - [x] Configuration support
 
 ## Low Priority 🟢
 
@@ -971,7 +986,7 @@
 ## Project Information
 
 **Last Updated**: 2025-10-24
-**Current Version**: v0.22.0
+**Current Version**: v0.23.0
 **Zig Version**: 0.15.1
 **License**: MIT
 
