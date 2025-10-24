@@ -2,6 +2,13 @@
 
 ## Recent Updates 📝
 
+### v0.10.0 (2025-10-23) - Security & Protocol Extensions
+- ✅ **ClamAV Integration**: Virus scanning for messages and attachments
+- ✅ **SpamAssassin Integration**: Spam filtering with configurable policies
+- ✅ **BINARYMIME Support**: Binary data transmission (RFC 3030)
+- ✅ **ETRN Support**: Remote queue processing (RFC 1985)
+- ✅ **Integration Tests**: Comprehensive end-to-end test framework
+
 ### v0.9.0 (2025-10-23) - Performance & Scalability
 - ✅ **StatsD Support**: Real-time metrics reporting to StatsD servers
 - ✅ **Memory Pools**: Fixed-size block allocation, buffer pools, arena allocators
@@ -438,8 +445,25 @@
   - [x] List settings configuration
   - [x] Thread-safe operations
   - [x] Mailing list manager for multiple lists
-- [ ] Virus scanning integration (ClamAV)
-- [ ] Spam filter integration (SpamAssassin)
+- [x] Virus scanning integration (ClamAV)
+  - [x] ClamAV daemon (clamd) integration
+  - [x] INSTREAM protocol for message scanning
+  - [x] File scanning support
+  - [x] Virus database reloading
+  - [x] Scan result tracking and statistics
+  - [x] Virus action policies (reject, quarantine, tag, discard)
+  - [x] Scan policy configuration
+  - [x] Comprehensive test coverage
+- [x] Spam filter integration (SpamAssassin)
+  - [x] SpamAssassin daemon (spamd) integration
+  - [x] SYMBOLS protocol for detailed spam analysis
+  - [x] CHECK protocol for quick spam/ham detection
+  - [x] Bayes filter training (TELL protocol)
+  - [x] Spam scoring and threshold configuration
+  - [x] Spam action policies (reject, quarantine, tag, discard, rewrite_subject)
+  - [x] Policy presets (strict, standard, permissive)
+  - [x] Auto-learning support
+  - [x] Comprehensive test coverage
 - [x] Content filtering
   - [x] Filter engine with rule-based message processing
   - [x] Multiple condition types (from, to, subject, header, body, size, attachments)
@@ -469,7 +493,14 @@
   - [x] Batch response generation
   - [x] Pipeline statistics tracking
   - [x] Maximum pipeline depth enforcement
-- [ ] BINARYMIME support (RFC 3030)
+- [x] BINARYMIME support (RFC 3030)
+  - [x] BODY parameter parsing (7BIT, 8BITMIME, BINARYMIME)
+  - [x] Message validation for each BODY type
+  - [x] Binary data transmission (requires CHUNKING)
+  - [x] Content-Transfer-Encoding detection
+  - [x] Binary MIME part handling
+  - [x] 8BITMIME and BINARYMIME capability advertisement
+  - [x] Comprehensive test coverage
 - [ ] DELIVERBY extension (RFC 2852)
 - [x] DSN extension (RFC 3461)
   - [x] MAIL FROM RET parameter (FULL/HDRS)
@@ -480,14 +511,32 @@
   - [x] Failure notification generation
   - [x] Delay notification generation
   - [x] RFC 3464 compliant DSN format
-- [ ] ETRN support (RFC 1985)
+- [x] ETRN support (RFC 1985)
+  - [x] ETRN command parsing (domain, @node, #queue)
+  - [x] Queue processing trigger
+  - [x] Domain allowlist management
+  - [x] Response code handling (250, 251, 252, 253, 458, 459)
+  - [x] Queue message counting
+  - [x] Queue processor implementation
+  - [x] ETRN statistics tracking
+  - [x] Comprehensive test coverage
 - [ ] ATRN support (RFC 2645)
 
 ### Developer Experience
 - [x] Comprehensive test suite
   - [x] Unit tests for all modules (embedded in each .zig file)
   - [x] Test coverage for core functionality
-  - [ ] Integration tests
+  - [x] Integration tests
+    - [x] SMTP server connection testing
+    - [x] Authentication flow testing
+    - [x] Message delivery testing
+    - [x] Extension testing (PIPELINING, SIZE, CHUNKING, STARTTLS)
+    - [x] Concurrent connection testing
+    - [x] Error handling testing
+    - [x] Quota and rate limiting testing
+    - [x] Virus and spam scanning integration testing
+    - [x] Storage backend testing (Maildir, mbox, PostgreSQL, S3)
+    - [x] Test helper functions for client simulation
   - [ ] End-to-end tests
   - [ ] Fuzzing tests
 - [x] CI/CD pipeline
@@ -584,7 +633,7 @@
 ## Project Information
 
 **Last Updated**: 2025-10-23 (current date)
-**Current Version**: v0.6.0
+**Current Version**: v0.10.0
 **Zig Version**: 0.15.1
 **License**: MIT
 
