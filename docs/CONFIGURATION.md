@@ -255,6 +255,36 @@ SMTP_GREETING_TIMEOUT_SECONDS=10
 
 ---
 
+### Observability & Tracing
+
+#### SMTP_ENABLE_TRACING
+- **Description:** Enable OpenTelemetry distributed tracing
+- **Type:** Boolean
+- **Default:** `false`
+- **Values:** `true`, `false`, `1`, `0`
+- **Purpose:** Enable trace context propagation and span collection for distributed tracing
+- **Examples:**
+  ```bash
+  SMTP_ENABLE_TRACING=true    # Enable tracing
+  SMTP_ENABLE_TRACING=false   # Disable tracing (default)
+  ```
+- **Note:** When enabled, the server will create spans for SMTP operations and propagate trace context using W3C Trace Context standard.
+
+#### SMTP_TRACING_SERVICE_NAME
+- **Description:** Service name to identify this SMTP server in traces
+- **Type:** String
+- **Default:** `smtp-server`
+- **Purpose:** Helps identify this service in distributed tracing systems
+- **Examples:**
+  ```bash
+  SMTP_TRACING_SERVICE_NAME=smtp-server         # Default
+  SMTP_TRACING_SERVICE_NAME=smtp-prod-us-west-1 # Production with region
+  SMTP_TRACING_SERVICE_NAME=smtp-staging        # Staging environment
+  ```
+- **Recommendation:** Use descriptive names that include environment and region for easier debugging in production.
+
+---
+
 ### Authentication
 
 #### SMTP_ENABLE_AUTH
