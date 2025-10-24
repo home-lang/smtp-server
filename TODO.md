@@ -2,6 +2,13 @@
 
 ## Recent Updates 📝
 
+### v0.15.0 (2025-10-23) - GDPR Compliance & Documentation
+- ✅ **GDPR Data Export**: Complete user data export in JSON format (Article 15 & 20)
+- ✅ **GDPR Data Deletion**: Permanent, secure data erasure (Article 17)
+- ✅ **GDPR Audit Logging**: Processing activities record (Article 30)
+- ✅ **GDPR CLI Tool**: Command-line tool for GDPR operations
+- ✅ **API Documentation**: Comprehensive REST API, CLI, and protocol documentation
+
 ### v0.14.0 (2025-10-23) - Comprehensive Testing Suite
 - ✅ **End-to-End Tests**: 11 complete workflow tests covering all SMTP operations
 - ✅ **Fuzzing Tests**: 15 security-focused fuzzing tests for robustness
@@ -679,7 +686,18 @@
   - [x] Service management with systemd
   - [x] Comprehensive documentation
 - [ ] Documentation
-  - [ ] API documentation
+  - [x] API documentation
+    - [x] REST API endpoints (health, stats, users, queue)
+    - [x] Prometheus metrics
+    - [x] CLI tools (user-cli, gdpr-cli)
+    - [x] Protocol extensions (PIPELINING, SIZE, AUTH, etc.)
+    - [x] Configuration API (environment variables)
+    - [x] Storage API (Maildir, mbox, database, S3, time-series)
+    - [x] Authentication API (Argon2id, SMTP AUTH)
+    - [x] Monitoring API (health checks, metrics)
+    - [x] Error codes (HTTP, SMTP)
+    - [x] Rate limiting
+    - [x] WebHooks
   - [ ] Architecture diagrams
   - [ ] Deployment guides
   - [ ] Troubleshooting guide
@@ -724,10 +742,28 @@
 - [ ] RFC 5322 message format compliance
 - [ ] RFC 6409 message submission support
 - [ ] CAN-SPAM compliance features
-- [ ] GDPR compliance features
-  - [ ] Data export
-  - [ ] Data deletion
-  - [ ] Audit logging
+- [x] GDPR compliance features
+  - [x] Data export (Article 15 & 20)
+    - [x] Complete user data export
+    - [x] JSON format (machine-readable)
+    - [x] Personal information export
+    - [x] Message metadata and content
+    - [x] Activity log export
+    - [x] Storage metadata
+  - [x] Data deletion (Article 17)
+    - [x] Permanent user data removal
+    - [x] Atomic database transactions
+    - [x] Cascade deletion (messages, user records)
+    - [x] Audit logging before deletion
+  - [x] Audit logging (Article 30)
+    - [x] Data access logging
+    - [x] Export operation logging
+    - [x] Deletion operation logging
+    - [x] Timestamp and IP tracking
+  - [x] GDPR CLI tool
+    - [x] gdpr-cli export command
+    - [x] gdpr-cli delete command
+    - [x] gdpr-cli log command
 
 ## Future Ideas 💡
 

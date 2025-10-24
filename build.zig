@@ -109,6 +109,21 @@ pub fn build(b: *std.Build) void {
     user_cli.linkSystemLibrary("sqlite3");
     b.installArtifact(user_cli);
 
+    // GDPR compliance CLI tool
+    const gdpr_cli_module = b.createModule(.{
+        .root_source_file = b.path("src/gdpr_cli.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const gdpr_cli = b.addExecutable(.{
+        .name = "gdpr-cli",
+        .root_module = gdpr_cli_module,
+    });
+    gdpr_cli.linkLibC();
+    gdpr_cli.linkSystemLibrary("sqlite3");
+    b.installArtifact(gdpr_cli);
+
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
 
