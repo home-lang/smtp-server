@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMTP Server Admin - v0.25.0</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f7fa;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        header h1 {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            opacity: 0.9;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+
+        .stat-card h3 {
+            color: #667eea;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+
+        .stat-card .value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            color: #666;
+            transition: all 0.3s;
+            border-bottom: 3px solid transparent;
+        }
+
+        .tab:hover {
+            color: #667eea;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #667eea;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 1px;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+
+        .btn-danger {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 0.8rem;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #555;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+
+        .modal-content h2 {
+            margin-bottom: 20px;
+            color: #667eea;
+        }
+
+        .close-btn {
+            float: right;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #999;
+        }
+
+        .close-btn:hover {
+            color: #333;
+        }
+
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .status-enabled {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-disabled {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .success {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .refresh-btn {
+            float: right;
+            background: #f8f9fa;
+            color: #667eea;
+            border: 2px solid #667eea;
+        }
+
+        .refresh-btn:hover {
+            background: #667eea;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📧 SMTP Server Administration</h1>
+            <p>Version 0.25.0 - Professional Email Server Management</p>
+        </header>
+
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <h3>Server Status</h3>
+                <div class="value" id="serverStatus">Loading...</div>
+            </div>
+            <div class="stat-card">
+                <h3>Total Users</h3>
+                <div class="value" id="totalUsers">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Queue Total</h3>
+                <div class="value" id="queueTotal">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Pending Messages</h3>
+                <div class="value" id="queuePending">-</div>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('users')">Users</button>
+            <button class="tab" onclick="switchTab('queue')">Message Queue</button>
+            <button class="tab" onclick="switchTab('filters')">Filters</button>
+            <button class="tab" onclick="switchTab('config')">Configuration</button>
+            <button class="tab" onclick="switchTab('logs')">Logs</button>
+        </div>
+
+        <!-- Users Tab -->
+        <div class="tab-content active" id="users-tab">
+            <button class="btn btn-primary" onclick="showCreateUserModal()">+ Create User</button>
+            <button class="btn refresh-btn" onclick="loadUsers()">🔄 Refresh</button>
+            <div id="usersContent">
+                <div class="loading">Loading users...</div>
+            </div>
+        </div>
+
+        <!-- Queue Tab -->
+        <div class="tab-content" id="queue-tab">
+            <button class="btn refresh-btn" onclick="loadQueue()">🔄 Refresh</button>
+            <div id="queueContent">
+                <div class="loading">Loading queue...</div>
+            </div>
+        </div>
+
+        <!-- Filters Tab -->
+        <div class="tab-content" id="filters-tab">
+            <button class="btn refresh-btn" onclick="loadFilters()">🔄 Refresh</button>
+            <div id="filtersContent">
+                <div class="loading">Loading filters...</div>
+            </div>
+        </div>
+
+        <!-- Configuration Tab -->
+        <div class="tab-content" id="config-tab">
+            <button class="btn refresh-btn" onclick="loadConfig()">🔄 Refresh</button>
+            <div id="configContent">
+                <div class="loading">Loading configuration...</div>
+            </div>
+        </div>
+
+        <!-- Logs Tab -->
+        <div class="tab-content" id="logs-tab">
+            <button class="btn refresh-btn" onclick="loadLogs()">🔄 Refresh</button>
+            <div style="margin-bottom: 20px;">
+                <label for="logLevel">Filter by level:</label>
+                <select id="logLevel" onchange="loadLogs()" style="padding: 8px; border: 2px solid #e0e0e0; border-radius: 5px; margin-left: 10px;">
+                    <option value="">All Levels</option>
+                    <option value="ERROR">Error</option>
+                    <option value="WARN">Warning</option>
+                    <option value="INFO">Info</option>
+                    <option value="DEBUG">Debug</option>
+                </select>
+                <label for="logLimit" style="margin-left: 20px;">Limit:</label>
+                <select id="logLimit" onchange="loadLogs()" style="padding: 8px; border: 2px solid #e0e0e0; border-radius: 5px; margin-left: 10px;">
+                    <option value="50">50 lines</option>
+                    <option value="100" selected>100 lines</option>
+                    <option value="200">200 lines</option>
+                    <option value="500">500 lines</option>
+                    <option value="1000">1000 lines</option>
+                </select>
+            </div>
+            <div id="logsContent">
+                <div class="loading">Loading logs...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create User Modal -->
+    <div class="modal" id="createUserModal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeModal('createUserModal')">&times;</span>
+            <h2>Create New User</h2>
+            <form onsubmit="createUser(event)">
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" id="newUsername" required minlength="3">
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="newEmail" required>
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="newPassword" required minlength="8">
+                </div>
+                <button type="submit" class="btn btn-primary">Create User</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let currentTab = 'users';
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadStats();
+            loadUsers();
+            setInterval(loadStats, 30000); // Refresh stats every 30 seconds
+        });
+
+        function switchTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+            event.target.classList.add('active');
+            document.getElementById(tab + '-tab').classList.add('active');
+
+            if (tab === 'users') loadUsers();
+            else if (tab === 'queue') loadQueue();
+            else if (tab === 'filters') loadFilters();
+            else if (tab === 'config') loadConfig();
+            else if (tab === 'logs') loadLogs();
+        }
+
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const data = await response.json();
+
+                document.getElementById('serverStatus').textContent = '🟢 ' + data.server.status;
+                document.getElementById('totalUsers').textContent = data.users.total;
+                document.getElementById('queueTotal').textContent = data.queue.total;
+                document.getElementById('queuePending').textContent = data.queue.pending;
+            } catch (error) {
+                console.error('Failed to load stats:', error);
+            }
+        }
+
+        async function loadUsers() {
+            const content = document.getElementById('usersContent');
+            content.innerHTML = '<div class="loading">Loading users...</div>';
+
+            try {
+                const response = await fetch('/api/users');
+                const data = await response.json();
+
+                if (data.users.length === 0) {
+                    content.innerHTML = '<p style="text-align:center;color:#999;padding:40px">No users found</p>';
+                    return;
+                }
+
+                let html = '<table><thead><tr><th>Username</th><th>Email</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
+
+                data.users.forEach(user => {
+                    const date = new Date(user.created_at * 1000).toLocaleDateString();
+                    const status = user.enabled ?
+                        '<span class="status-badge status-enabled">Enabled</span>' :
+                        '<span class="status-badge status-disabled">Disabled</span>';
+
+                    html += `<tr>
+                        <td>${user.username}</td>
+                        <td>${user.email}</td>
+                        <td>${status}</td>
+                        <td>${date}</td>
+                        <td>
+                            <button class="btn btn-danger btn-small" onclick="deleteUser('${user.username}')">Delete</button>
+                        </td>
+                    </tr>`;
+                });
+
+                html += '</tbody></table>';
+                content.innerHTML = html;
+            } catch (error) {
+                content.innerHTML = '<div class="error">Failed to load users: ' + error.message + '</div>';
+            }
+        }
+
+        async function loadQueue() {
+            const content = document.getElementById('queueContent');
+            content.innerHTML = '<div class="loading">Loading queue...</div>';
+
+            try {
+                const response = await fetch('/api/queue');
+                const data = await response.json();
+
+                let html = `
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <h3>Total</h3>
+                            <div class="value">${data.total}</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Pending</h3>
+                            <div class="value">${data.pending}</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Processing</h3>
+                            <div class="value">${data.processing}</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Retry</h3>
+                            <div class="value">${data.retry}</div>
+                        </div>
+                    </div>
+                `;
+
+                content.innerHTML = html;
+            } catch (error) {
+                content.innerHTML = '<div class="error">Failed to load queue: ' + error.message + '</div>';
+            }
+        }
+
+        async function loadFilters() {
+            const content = document.getElementById('filtersContent');
+            content.innerHTML = '<div class="loading">Loading filters...</div>';
+
+            try {
+                const response = await fetch('/api/filters');
+                const data = await response.json();
+
+                if (data.filters.length === 0) {
+                    content.innerHTML = '<p style="text-align:center;color:#999;padding:40px">No filters configured</p>';
+                    return;
+                }
+
+                let html = '<table><thead><tr><th>Name</th><th>Status</th><th>Action</th></tr></thead><tbody>';
+
+                data.filters.forEach(filter => {
+                    const status = filter.enabled ?
+                        '<span class="status-badge status-enabled">Enabled</span>' :
+                        '<span class="status-badge status-disabled">Disabled</span>';
+
+                    html += `<tr>
+                        <td>${filter.name}</td>
+                        <td>${status}</td>
+                        <td>${filter.action}</td>
+                    </tr>`;
+                });
+
+                html += '</tbody></table>';
+                content.innerHTML = html;
+            } catch (error) {
+                content.innerHTML = '<div class="error">Failed to load filters: ' + error.message + '</div>';
+            }
+        }
+
+        function showCreateUserModal() {
+            document.getElementById('createUserModal').classList.add('active');
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+        }
+
+        async function createUser(event) {
+            event.preventDefault();
+
+            const username = document.getElementById('newUsername').value;
+            const email = document.getElementById('newEmail').value;
+            const password = document.getElementById('newPassword').value;
+
+            try {
+                const response = await fetch('/api/users', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, email, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    closeModal('createUserModal');
+                    loadUsers();
+                    loadStats();
+                    alert('User created successfully!');
+                } else {
+                    alert('Error: ' + (data.error || 'Failed to create user'));
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        async function loadConfig() {
+            const content = document.getElementById('configContent');
+            content.innerHTML = '<div class="loading">Loading configuration...</div>';
+
+            try {
+                const response = await fetch('/api/config');
+                const data = await response.json();
+
+                if (!data.config || Object.keys(data.config).length === 0) {
+                    content.innerHTML = '<p style="text-align:center;color:#999;padding:40px">No configuration variables set</p>';
+                    return;
+                }
+
+                let html = '<table><thead><tr><th>Setting</th><th>Value</th></tr></thead><tbody>';
+
+                for (const [key, value] of Object.entries(data.config)) {
+                    html += `<tr>
+                        <td><strong>${key}</strong></td>
+                        <td><code style="background:#f8f9fa;padding:4px 8px;border-radius:3px;">${value}</code></td>
+                    </tr>`;
+                }
+
+                html += '</tbody></table>';
+                html += '<div style="margin-top:20px;padding:15px;background:#fff3cd;border:1px solid #ffc107;border-radius:5px;color:#856404;">';
+                html += '<strong>Note:</strong> Configuration changes require editing environment variables and restarting the server.';
+                html += '</div>';
+
+                content.innerHTML = html;
+            } catch (error) {
+                content.innerHTML = '<div class="error">Failed to load configuration: ' + error.message + '</div>';
+            }
+        }
+
+        async function loadLogs() {
+            const content = document.getElementById('logsContent');
+            content.innerHTML = '<div class="loading">Loading logs...</div>';
+
+            const level = document.getElementById('logLevel')?.value || '';
+            const limit = document.getElementById('logLimit')?.value || '100';
+
+            try {
+                let url = `/api/logs?limit=${limit}`;
+                if (level) {
+                    url += `&level=${level}`;
+                }
+
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (!data.logs || data.logs.length === 0) {
+                    content.innerHTML = '<p style="text-align:center;color:#999;padding:40px">No logs found</p>';
+                    return;
+                }
+
+                let html = '<div style="background:#1e1e1e;color:#d4d4d4;padding:20px;border-radius:5px;font-family:\'Courier New\',monospace;font-size:13px;overflow-x:auto;max-height:600px;overflow-y:auto;">';
+
+                data.logs.forEach(log => {
+                    // Color code based on log level
+                    let color = '#d4d4d4';
+                    if (log.includes('ERROR') || log.includes('CRITICAL')) {
+                        color = '#f48771';
+                    } else if (log.includes('WARN')) {
+                        color = '#dcdcaa';
+                    } else if (log.includes('INFO')) {
+                        color = '#4ec9b0';
+                    } else if (log.includes('DEBUG')) {
+                        color = '#9cdcfe';
+                    }
+
+                    html += `<div style="color:${color};margin-bottom:4px;line-height:1.4;">${escapeHtml(log)}</div>`;
+                });
+
+                html += '</div>';
+                html += `<div style="margin-top:10px;color:#666;font-size:14px;">Showing ${data.count} log entries</div>`;
+
+                content.innerHTML = html;
+            } catch (error) {
+                content.innerHTML = '<div class="error">Failed to load logs: ' + error.message + '</div>';
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function deleteUser(username) {
+            if (!confirm(`Are you sure you want to delete user "${username}"?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/users/${username}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    loadUsers();
+                    loadStats();
+                    alert('User deleted successfully!');
+                } else {
+                    alert('Error: ' + (data.error || 'Failed to delete user'));
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>
