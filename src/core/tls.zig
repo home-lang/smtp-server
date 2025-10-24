@@ -2,12 +2,15 @@ const std = @import("std");
 const net = std.net;
 const logger = @import("logger.zig");
 const tls = @import("tls");
+const cert_validator = @import("cert_validator.zig");
 
 /// TLS configuration for the SMTP server
 pub const TlsConfig = struct {
     enabled: bool,
     cert_path: ?[]const u8,
     key_path: ?[]const u8,
+    validate_certificates: bool = true,
+    allow_self_signed: bool = false,
 };
 
 /// TLS context for managing certificates and keys
@@ -88,12 +91,67 @@ pub const TlsContext = struct {
         }
     }
 
-    /// Check if certificate and key are valid PEM format
+    /// Validate certificates using the certificate validator
     pub fn validateCertificates(self: *TlsContext) !void {
+        if (!self.config.validate_certificates) {
+            self.logger.warn("Certificate validation disabled", .{});
+            return;
+        }
+
         if (self.cert_data) |cert| {
+            // Basic PEM format check
             if (!std.mem.startsWith(u8, cert, "-----BEGIN CERTIFICATE-----")) {
                 self.logger.err("Certificate does not appear to be in PEM format", .{});
                 return error.InvalidCertificateFormat;
+            }
+
+            // Comprehensive validation using CertificateValidator
+            var validator = cert_validator.CertificateValidator.init(self.allocator);
+            validator.allow_self_signed = self.config.allow_self_signed;
+
+            var result = validator.validateCertificate(cert) catch |err| {
+                self.logger.err("Certificate validation failed: {}", .{err});
+                return err;
+            };
+            defer result.deinit(self.allocator);
+
+            // Log validation results
+            if (!result.valid) {
+                self.logger.err("Certificate validation failed:", .{});
+                for (result.errors.items) |error_msg| {
+                    self.logger.err("  - {s}", .{error_msg});
+                }
+                return error.InvalidCertificate;
+            }
+
+            // Log warnings
+            if (result.warnings.items.len > 0) {
+                self.logger.warn("Certificate validation warnings:", .{});
+                for (result.warnings.items) |warning| {
+                    self.logger.warn("  - {s}", .{warning});
+                }
+            }
+
+            // Log certificate info
+            if (result.subject_cn) |cn| {
+                self.logger.info("Certificate subject: {s}", .{cn});
+            }
+            if (result.issuer_cn) |issuer| {
+                self.logger.info("Certificate issuer: {s}", .{issuer});
+            }
+            if (result.self_signed) {
+                self.logger.warn("Certificate is self-signed", .{});
+            }
+            if (result.expired) {
+                self.logger.err("Certificate is expired", .{});
+                return error.CertificateExpired;
+            }
+            if (result.not_yet_valid) {
+                self.logger.err("Certificate is not yet valid", .{});
+                return error.CertificateNotYetValid;
+            }
+            if (result.days_until_expiry) |days| {
+                self.logger.info("Certificate expires in {d} days", .{days});
             }
         }
 
@@ -106,7 +164,7 @@ pub const TlsContext = struct {
             }
         }
 
-        self.logger.info("TLS certificates validated (format check only)", .{});
+        self.logger.info("TLS certificates validated successfully", .{});
     }
 
     /// Load and parse the CertKeyPair for reuse across handshakes

@@ -990,6 +990,132 @@
     - [x] gdpr-cli delete command
     - [x] gdpr-cli log command
 
+## Codebase Improvements 🔧
+
+### Phase 1: Critical Security Fixes ✅ COMPLETED (2025-10-24)
+- [x] **SQL Injection Prevention**: ✅ Verified - All queries use parameterized statements in `src/storage/database.zig`
+- [x] **Constant-Time Auth Comparison**: ✅ Verified - Uses `crypto.timing_safe.eql()` in `src/auth/password.zig:112`
+- [x] **CSRF Protection**: ✅ Implemented - Full CSRF token management with X-CSRF-Token header validation
+  - Created `src/auth/csrf.zig` with CSRFManager
+  - Added token generation endpoint: GET /api/csrf-token
+  - Added validation to all POST/PUT/DELETE endpoints in `src/api/api.zig`
+  - One-time use tokens with 1-hour expiration
+- [x] **Remove Legacy Auth**: ✅ Removed - Deleted insecure `verifyCredentials()` function from `src/auth/auth.zig:62-69`
+- [x] **TLS Certificate Validation**: ✅ Implemented - Comprehensive certificate validation framework
+  - Created `src/core/cert_validator.zig` with CertificateValidator
+  - PEM format validation
+  - Expiration checking with early warning (30 days)
+  - Self-signed certificate detection
+  - Hostname/wildcard validation
+  - Integrated into `src/core/tls.zig` with detailed logging
+- [x] **Header Injection Prevention**: ✅ Implemented - Added `sanitizeForHeader()` function in `src/core/protocol.zig:906-917`
+  - Removes all CR and LF characters from SMTP response headers
+  - Applied to all sendResponse() calls
+- [x] **Per-Username Rate Limiting**: ✅ Verified - Already implemented in `src/auth/security.zig`
+  - Separate user_counters HashMap
+  - checkAndIncrementUser() method
+  - Per-user max_requests_per_user limit
+  - Thread-safe with mutex protection
+
+### Phase 2: Reliability Improvements
+- [ ] **Persistent Message Queue**: Implement durable queue with database persistence in `src/delivery/queue.zig`
+- [ ] **Circuit Breaker Pattern**: Add circuit breaker for database, webhooks, and relay connections
+- [ ] **Error Recovery Paths**: Add context preservation in error paths for debugging
+- [ ] **Database Migrations**: Create migration framework for schema changes
+- [ ] **Enhanced Health Checks**: Add dependency status checks (database, storage, queue) to health endpoint
+- [ ] **Greylist Persistence**: Persist greylist data to SQLite in `src/antispam/greylist.zig`
+- [ ] **Streaming Message Parser**: Implement bounded-buffer streaming parser for large messages
+
+### Phase 3: Thread Safety & Concurrency
+- [ ] **Global Logger Race Fix**: Use atomic initialization for global logger in `src/core/logger.zig:150-159`
+- [ ] **Rate Limiter Thread Safety**: Add mutex protection to iterator in cleanup thread
+- [ ] **Connection Pool CAS**: Use atomic compare-and-swap for connection acquisition
+- [ ] **Cluster State Atomics**: Use atomic operations for leader election state transitions
+- [ ] **Greylist Locking**: Add mutex protection to greylist concurrent access
+
+### Phase 4: Performance Optimizations
+- [ ] **Buffer Pool for Headers**: Implement pre-allocated buffer pool for header parsing in `src/message/headers.zig`
+- [ ] **Rate Limiter Optimization**: Replace O(n) cleanup with timestamp bucketing or lazy deletion
+- [ ] **Connection Buffer Reuse**: Pre-allocate buffer pools in connection pool
+- [ ] **Vectored I/O**: Implement `writev()` for multi-part responses
+- [ ] **io_uring Integration**: Complete io_uring wrapper for Linux in `src/infrastructure/io_uring.zig`
+- [ ] **Pre-sized Hash Maps**: Reserve capacity for headers and other maps
+- [ ] **Zero-Copy Optimizations**: Minimize allocation in hot paths
+
+### Phase 5: Input Validation & Error Handling
+- [ ] **MIME Depth Validation**: Add max nesting depth (10 levels) to MIME parser
+- [ ] **MIME Boundary Validation**: Enforce RFC boundary length limits (70 chars max)
+- [ ] **Email Address Validation**: Create comprehensive validator (local part 64, domain label 63, total 320)
+- [ ] **Header Line Length**: Enforce RFC 5322 max line length (998 chars)
+- [ ] **DNS Resolution Validation**: Add address family checks after DNS resolution
+- [ ] **Database NULL Handling**: Return Option types instead of empty slices
+- [ ] **Replace Unreachable**: Replace `unreachable` with proper error types in protocol handler
+
+### Phase 6: Observability & Monitoring
+- [ ] **Prometheus Metrics Export**: Add `/metrics` endpoint with comprehensive metrics
+- [ ] **Structured JSON Logging**: Implement JSON log format for aggregation
+- [ ] **Distributed Tracing**: Add Jaeger/DataDog OTLP exporters for OpenTelemetry
+- [ ] **Request Tracing**: Add trace spans to individual SMTP commands
+- [ ] **Application Metrics**: Track spam/virus stats, auth categorization, bounce rates
+- [ ] **Alerting Integration**: Add webhooks for critical events (queue size, error rate)
+- [ ] **SLO/SLI Tracking**: Define and track reliability targets
+
+### Phase 7: Testing & Quality
+- [ ] **Security Test Suite**: Create OWASP-based security tests in `tests/security_test.zig`
+- [ ] **Error Path Testing**: Add tests for failures (DB, network, allocation, timeout)
+- [ ] **Load Testing**: Implement 10k+ concurrent connection tests
+- [ ] **Fuzzing Harnesses**: Add structured fuzzing for email, MIME, header parsers
+- [ ] **Coverage Measurement**: Add coverage tracking and enforce minimum thresholds
+- [ ] **Chaos Engineering**: Add fault injection tests for resilience
+- [ ] **Regression Test Index**: Document past vulnerabilities with test references
+
+### Phase 8: Configuration & Deployment
+- [ ] **Configuration Validation**: Add startup validation for all config values
+- [ ] **Configuration Profiles**: Support dev/test/prod profiles
+- [ ] **Config File Support**: Add TOML/YAML config file parsing
+- [ ] **Secret Management**: Integrate HashiCorp Vault, K8s Secrets, AWS Secrets Manager
+- [ ] **Hot Reload**: Implement SIGHUP config reload without restart
+- [ ] **Kubernetes Tuning**: Add resource limits and network policy documentation
+- [ ] **Startup Validation Mode**: Add `--validate-only` flag for config checking
+
+### Phase 9: Code Quality & Consistency
+- [ ] **Centralized Error Handling**: Create error handler utility to reduce duplication
+- [ ] **Standardize Memory Management**: Enforce consistent RAII with defer pattern
+- [ ] **Buffer Size Constants**: Define constants for all magic buffer sizes
+- [ ] **Enforce Logger Usage**: Replace all `std.debug.print()` with logger interface
+- [ ] **Centralize Defaults**: Single source of truth for all config defaults
+- [ ] **Deduplicate Imports**: Create common module imports in `src/root.zig`
+
+### Phase 10: Documentation Improvements
+- [ ] **OpenAPI Specification**: Add Swagger/OpenAPI docs for REST API
+- [ ] **Database Schema Docs**: Document schema, migrations, maintenance in `docs/DATABASE.md`
+- [ ] **Deployment Runbooks**: Create step-by-step operational procedures
+- [ ] **Troubleshooting Guide**: Document common errors and solutions
+- [ ] **Algorithm Documentation**: Add detailed comments to SPF, cluster, encryption logic
+- [ ] **Architecture Decision Records**: Create `docs/ADR/` with design rationale
+- [ ] **Configuration Reference**: Complete reference with defaults and tuning guidance
+
+### Phase 11: Enterprise Features
+- [ ] **Audit Trail**: Log all administrative actions (user CRUD, config changes, ACL)
+- [ ] **Backup/Restore CLI**: Create operational backup utility with verification
+- [ ] **Multi-Region Support**: Design cross-region replication and failover
+- [ ] **Service Dependency Graph**: Track dependencies for graceful degradation
+- [ ] **Readiness Probes**: Implement comprehensive K8s readiness checks
+- [ ] **Database Migration Tool**: Create automated migration framework
+- [ ] **Secure Password Reset**: Implement token-based reset with expiration
+
+### Quick Wins (Low Effort, High Impact) ⚡
+- [ ] Remove unreachable blocks - Replace with proper error types (30 min)
+- [ ] Add configuration validation - Check port range, paths exist (1 hour)
+- [ ] Fix rate limiter thread safety - Add mutex to cleanup (1 hour)
+- [ ] Remove legacy auth function - Delete unused `verifyCredentials()` (15 min)
+- [ ] Add health check details - Expand endpoint with dependencies (1 hour)
+- [ ] Add API documentation - Document REST endpoints (2 hours)
+- [ ] Fix MIME header validation - Add length checks (2 hours)
+- [ ] Add per-username rate limiting - Extend current limiter (1 hour)
+- [ ] Add JSON structured logging - Wrap current logging (2 hours)
+- [ ] Add fuzzing harnesses - For protocol parsing (2 hours)
+
 ## Future Ideas 💡
 
 - [ ] Machine learning spam detection

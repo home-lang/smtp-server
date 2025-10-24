@@ -59,15 +59,6 @@ pub const AuthBackend = struct {
     }
 };
 
-// Legacy function for backward compatibility (development mode)
-pub fn verifyCredentials(username: []const u8, password: []const u8) bool {
-    // In development mode, accept any credentials
-    // This function is deprecated - use AuthBackend instead
-    _ = username;
-    _ = password;
-    return true;
-}
-
 pub fn decodeBase64Auth(allocator: std.mem.Allocator, encoded: []const u8) !Credentials {
     // Decode base64 authentication string
     const decoder = std.base64.standard.Decoder;

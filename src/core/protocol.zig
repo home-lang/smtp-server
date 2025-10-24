@@ -903,12 +903,32 @@ pub const Session = struct {
         self.logger.info("TLS upgrade successful - connection now encrypted", .{});
     }
 
+    /// Sanitize a string by removing CR and LF characters to prevent header injection
+    fn sanitizeForHeader(input: []const u8, buf: []u8) []const u8 {
+        var write_pos: usize = 0;
+        for (input) |c| {
+            // Skip CR and LF characters
+            if (c != '\r' and c != '\n' and write_pos < buf.len) {
+                buf[write_pos] = c;
+                write_pos += 1;
+            }
+        }
+        return buf[0..write_pos];
+    }
+
     fn sendResponse(self: *Session, writer: anytype, code: u16, message: []const u8, extra: ?[]const u8) !void {
         var response_buf: [1024]u8 = undefined;
-        const response = if (extra) |ext|
-            try std.fmt.bufPrint(&response_buf, "{d} {s} {s}\r\n", .{ code, message, ext })
-        else
-            try std.fmt.bufPrint(&response_buf, "{d} {s}\r\n", .{ code, message });
+        var sanitized_buf: [512]u8 = undefined;
+
+        // Sanitize message to prevent CRLF injection
+        const sanitized_message = sanitizeForHeader(message, &sanitized_buf);
+
+        const response = if (extra) |ext| blk: {
+            var extra_sanitized_buf: [256]u8 = undefined;
+            const sanitized_extra = sanitizeForHeader(ext, &extra_sanitized_buf);
+            break :blk try std.fmt.bufPrint(&response_buf, "{d} {s} {s}\r\n", .{ code, sanitized_message, sanitized_extra });
+        } else
+            try std.fmt.bufPrint(&response_buf, "{d} {s}\r\n", .{ code, sanitized_message });
 
         _ = try self.conn_wrapper.write(response);
         _ = writer;

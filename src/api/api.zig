@@ -1,6 +1,7 @@
 const std = @import("std");
 const database = @import("../storage/database.zig");
-const auth_mod = @import("auth/auth.zig");
+const auth_mod = @import("../auth/auth.zig");
+const csrf_mod = @import("../auth/csrf.zig");
 const queue_mod = @import("../delivery/queue.zig");
 const filter_mod = @import("../message/filter.zig");
 const search_mod = @import("search.zig");
@@ -14,6 +15,7 @@ pub const APIServer = struct {
     message_queue: *queue_mod.MessageQueue,
     filter_engine: *filter_mod.FilterEngine,
     search_engine: ?*search_mod.MessageSearch,
+    csrf_manager: csrf_mod.CSRFManager,
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -32,7 +34,12 @@ pub const APIServer = struct {
             .message_queue = message_queue,
             .filter_engine = filter_engine,
             .search_engine = search_engine,
+            .csrf_manager = csrf_mod.CSRFManager.init(allocator),
         };
+    }
+
+    pub fn deinit(self: *APIServer) void {
+        self.csrf_manager.deinit();
     }
 
     pub fn run(self: *APIServer) !void {
@@ -77,6 +84,8 @@ pub const APIServer = struct {
                 try self.handleGetUser(stream, path);
             } else if (std.mem.startsWith(u8, path, "/api/stats")) {
                 try self.handleGetStats(stream);
+            } else if (std.mem.eql(u8, path, "/api/csrf-token")) {
+                try self.handleGetCSRFToken(stream);
             } else if (std.mem.eql(u8, path, "/") or std.mem.eql(u8, path, "/admin")) {
                 try self.serveAdminPage(stream);
             } else if (std.mem.startsWith(u8, path, "/api/queue")) {
@@ -95,6 +104,11 @@ pub const APIServer = struct {
                 try self.send404(stream);
             }
         } else if (std.mem.eql(u8, method, "POST")) {
+            // Validate CSRF token for state-changing operations
+            if (!try self.validateCSRFToken(request)) {
+                return self.send403(stream, "Invalid or missing CSRF token");
+            }
+
             if (std.mem.startsWith(u8, path, "/api/users")) {
                 try self.handleCreateUser(stream, request);
             } else if (std.mem.startsWith(u8, path, "/api/filters")) {
@@ -105,6 +119,11 @@ pub const APIServer = struct {
                 try self.send404(stream);
             }
         } else if (std.mem.eql(u8, method, "PUT")) {
+            // Validate CSRF token for state-changing operations
+            if (!try self.validateCSRFToken(request)) {
+                return self.send403(stream, "Invalid or missing CSRF token");
+            }
+
             if (std.mem.startsWith(u8, path, "/api/users/")) {
                 try self.handleUpdateUser(stream, path, request);
             } else if (std.mem.eql(u8, path, "/api/config")) {
@@ -113,6 +132,11 @@ pub const APIServer = struct {
                 try self.send404(stream);
             }
         } else if (std.mem.eql(u8, method, "DELETE")) {
+            // Validate CSRF token for state-changing operations
+            if (!try self.validateCSRFToken(request)) {
+                return self.send403(stream, "Invalid or missing CSRF token");
+            }
+
             if (std.mem.startsWith(u8, path, "/api/users/")) {
                 try self.handleDeleteUser(stream, path);
             } else if (std.mem.startsWith(u8, path, "/api/filters/")) {
@@ -123,6 +147,56 @@ pub const APIServer = struct {
         } else {
             try self.send404(stream);
         }
+    }
+
+    /// Extract CSRF token from request headers
+    fn extractCSRFToken(request: []const u8) ?[]const u8 {
+        var lines = std.mem.splitSequence(u8, request, "\r\n");
+        _ = lines.next(); // Skip request line
+
+        // Look for X-CSRF-Token header
+        while (lines.next()) |line| {
+            if (line.len == 0) break; // End of headers
+
+            if (std.mem.startsWith(u8, line, "X-CSRF-Token: ")) {
+                return std.mem.trim(u8, line[14..], " \t");
+            }
+        }
+
+        return null;
+    }
+
+    /// Validate CSRF token from request
+    fn validateCSRFToken(self: *APIServer, request: []const u8) !bool {
+        const token = extractCSRFToken(request) orelse return false;
+        return try self.csrf_manager.validateToken(token);
+    }
+
+    /// Handle GET /api/csrf-token - Generate new CSRF token
+    fn handleGetCSRFToken(self: *APIServer, stream: std.net.Stream) !void {
+        const token = try self.csrf_manager.generateToken();
+        defer self.allocator.free(token);
+
+        const json = try std.fmt.allocPrint(
+            self.allocator,
+            "{{\"token\":\"{s}\"}}",
+            .{token},
+        );
+        defer self.allocator.free(json);
+
+        try self.sendJSONResponse(stream, 200, json);
+    }
+
+    /// Send 403 Forbidden response
+    fn send403(self: *APIServer, stream: std.net.Stream, message: []const u8) !void {
+        const json = try std.fmt.allocPrint(
+            self.allocator,
+            "{{\"error\":\"{s}\"}}",
+            .{message},
+        );
+        defer self.allocator.free(json);
+
+        try self.sendJSONResponse(stream, 403, json);
     }
 
     fn handleGetUsers(self: *APIServer, stream: std.net.Stream) !void {
