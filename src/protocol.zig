@@ -5,6 +5,7 @@ const auth = @import("auth.zig");
 const logger = @import("logger.zig");
 const security = @import("security.zig");
 const webhook = @import("webhook.zig");
+const greylist_mod = @import("greylist.zig");
 const tls_mod = @import("tls.zig");
 
 const SMTPCommand = enum {
@@ -87,6 +88,7 @@ pub const Session = struct {
     last_activity: i64,
     tls_context: ?*tls_mod.TlsContext,
     auth_backend: ?*auth.AuthBackend,
+    greylist: ?*greylist_mod.Greylist,
     // TLS I/O buffers and reader/writer stored at session scope for lifetime management
     tls_input_buf: ?[]u8,
     tls_output_buf: ?[]u8,
@@ -103,6 +105,7 @@ pub const Session = struct {
         rate_limiter: *security.RateLimiter,
         tls_context: ?*tls_mod.TlsContext,
         auth_backend: ?*auth.AuthBackend,
+        greylist: ?*greylist_mod.Greylist,
     ) !Session {
         const now = std.time.timestamp();
         return Session{
@@ -126,6 +129,7 @@ pub const Session = struct {
             .last_activity = now,
             .tls_context = tls_context,
             .auth_backend = auth_backend,
+            .greylist = greylist,
             .tls_input_buf = null,
             .tls_output_buf = null,
             .tls_reader_info = null,
@@ -369,6 +373,22 @@ pub const Session = struct {
         if (addr.len == 0) {
             try self.sendResponse(writer, 501, "Invalid recipient address", null);
             return;
+        }
+
+        // Check greylisting if enabled
+        if (self.greylist) |greylist| {
+            const mail_from = self.mail_from orelse "";
+            const allowed = greylist.checkTriplet(self.remote_addr, mail_from, addr) catch blk: {
+                // Error checking greylist - allow by default
+                self.logger.warn("Greylist check error for {s}", .{self.remote_addr});
+                break :blk true;
+            };
+
+            if (!allowed) {
+                self.logger.info("Greylisting: Temporary reject for {s} -> {s} from {s}", .{ mail_from, addr, self.remote_addr });
+                try self.sendResponse(writer, 451, "Greylisted - please try again later", null);
+                return;
+            }
         }
 
         try self.rcpt_to.append(self.allocator, try self.allocator.dupe(u8, addr));

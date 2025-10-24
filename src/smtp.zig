@@ -7,6 +7,8 @@ const protocol = @import("protocol.zig");
 const logger = @import("logger.zig");
 const security = @import("security.zig");
 const tls_mod = @import("tls.zig");
+const dnsbl = @import("dnsbl.zig");
+const greylist_mod = @import("greylist.zig");
 
 pub const Server = struct {
     allocator: std.mem.Allocator,
@@ -19,6 +21,8 @@ pub const Server = struct {
     tls_context: ?tls_mod.TlsContext,
     db: ?*database.Database,
     auth_backend: ?*auth.AuthBackend,
+    dnsbl_checker: ?dnsbl.DnsblChecker,
+    greylist: ?*greylist_mod.Greylist,
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -26,6 +30,7 @@ pub const Server = struct {
         log: *logger.Logger,
         db: ?*database.Database,
         auth_backend: ?*auth.AuthBackend,
+        greylist: ?*greylist_mod.Greylist,
     ) !Server {
         // Rate limiter: max messages per hour per IP
         const rate_limiter = security.RateLimiter.init(
@@ -45,6 +50,13 @@ pub const Server = struct {
             tls_ctx = try tls_mod.TlsContext.init(allocator, tls_config, log);
         }
 
+        // Initialize DNSBL checker if enabled
+        var dnsbl_checker_opt: ?dnsbl.DnsblChecker = null;
+        if (cfg.enable_dnsbl) {
+            dnsbl_checker_opt = dnsbl.DnsblChecker.init(allocator, null);
+            log.info("DNSBL spam checking enabled with {} blacklists", .{dnsbl.DnsblChecker.DEFAULT_BLACKLISTS.len});
+        }
+
         return Server{
             .allocator = allocator,
             .config = cfg,
@@ -56,6 +68,8 @@ pub const Server = struct {
             .tls_context = tls_ctx,
             .db = db,
             .auth_backend = auth_backend,
+            .dnsbl_checker = dnsbl_checker_opt,
+            .greylist = greylist,
         };
     }
 
@@ -111,6 +125,17 @@ pub const Server = struct {
             const addr_str = std.fmt.bufPrint(&addr_buf, "{any}", .{remote_addr}) catch "unknown";
 
             self.logger.logConnection(addr_str, "connected");
+
+            // Check DNSBL if enabled
+            if (self.dnsbl_checker) |*checker| {
+                const is_blacklisted = checker.isBlacklisted(addr_str) catch false;
+                if (is_blacklisted) {
+                    self.logger.warn("Connection from {s} rejected - IP blacklisted in DNSBL", .{addr_str});
+                    _ = self.active_connections.fetchSub(1, .monotonic);
+                    connection.stream.close();
+                    continue;
+                }
+            }
 
             // Handle connection in a new thread for concurrent processing
             const ctx = ConnectionContext{
@@ -169,6 +194,7 @@ pub const Server = struct {
             &ctx.server.rate_limiter,
             tls_ctx_ptr,
             ctx.server.auth_backend,
+            ctx.server.greylist,
         ) catch |err| {
             ctx.server.logger.err("Failed to initialize session from {s}: {}", .{ ctx.remote_addr, err });
             return;

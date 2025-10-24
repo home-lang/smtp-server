@@ -16,6 +16,8 @@ pub const Config = struct {
     hostname: []const u8,
     webhook_url: ?[]const u8,
     webhook_enabled: bool,
+    enable_dnsbl: bool,
+    enable_greylist: bool,
 
     pub fn deinit(self: Config, allocator: std.mem.Allocator) void {
         allocator.free(self.host);
@@ -54,6 +56,8 @@ fn loadDefaults(allocator: std.mem.Allocator) !Config {
         .hostname = try allocator.dupe(u8, "localhost"),
         .webhook_url = null,
         .webhook_enabled = false,
+        .enable_dnsbl = false, // Disabled by default for performance
+        .enable_greylist = false, // Disabled by default
     };
 }
 
@@ -98,6 +102,16 @@ fn applyEnvironmentVariables(allocator: std.mem.Allocator, cfg: *Config) !void {
     // SMTP_ENABLE_AUTH
     if (std.posix.getenv("SMTP_ENABLE_AUTH")) |value| {
         cfg.enable_auth = std.ascii.eqlIgnoreCase(value, "true") or std.ascii.eqlIgnoreCase(value, "1");
+    }
+
+    // SMTP_ENABLE_DNSBL
+    if (std.posix.getenv("SMTP_ENABLE_DNSBL")) |value| {
+        cfg.enable_dnsbl = std.ascii.eqlIgnoreCase(value, "true") or std.ascii.eqlIgnoreCase(value, "1");
+    }
+
+    // SMTP_ENABLE_GREYLIST
+    if (std.posix.getenv("SMTP_ENABLE_GREYLIST")) |value| {
+        cfg.enable_greylist = std.ascii.eqlIgnoreCase(value, "true") or std.ascii.eqlIgnoreCase(value, "1");
     }
 
     // SMTP_TLS_CERT

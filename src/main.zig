@@ -5,6 +5,7 @@ const logger = @import("logger.zig");
 const args_parser = @import("args.zig");
 const database = @import("database.zig");
 const auth = @import("auth.zig");
+const greylist_mod = @import("greylist.zig");
 
 // Global shutdown flag
 var shutdown_requested = std.atomic.Value(bool).init(false);
@@ -97,8 +98,20 @@ pub fn main() !void {
 
     defer if (db) |*d| d.deinit();
 
+    // Initialize greylisting if enabled
+    var greylist: ?greylist_mod.Greylist = null;
+    var greylist_ptr: ?*greylist_mod.Greylist = null;
+
+    if (cfg.enable_greylist) {
+        greylist = greylist_mod.Greylist.init(allocator);
+        greylist_ptr = &greylist.?;
+        log.info("Greylisting enabled (5 min delay, 4 hour retry window)", .{});
+    }
+
+    defer if (greylist) |*g| g.deinit();
+
     // Create and start SMTP server
-    var server = try smtp.Server.init(allocator, cfg, &log, db_ptr, auth_ptr);
+    var server = try smtp.Server.init(allocator, cfg, &log, db_ptr, auth_ptr, greylist_ptr);
     defer server.deinit();
 
     log.info("Starting SMTP server...", .{});
