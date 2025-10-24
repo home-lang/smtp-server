@@ -2,6 +2,13 @@
 
 ## Recent Updates 📝
 
+### v0.11.0 (2025-10-23) - Advanced Features & Infrastructure
+- ✅ **Database Storage**: SQLite-based message storage with full-text search
+- ✅ **DELIVERBY Extension**: Time-constrained delivery (RFC 2852)
+- ✅ **ATRN Support**: Authenticated TURN for dial-up connections (RFC 2645)
+- ✅ **Kubernetes Manifests**: Production-ready K8s deployment
+- ✅ **Async I/O Framework**: io_uring support for Linux (framework)
+
 ### v0.10.0 (2025-10-23) - Security & Protocol Extensions
 - ✅ **ClamAV Integration**: Virus scanning for messages and attachments
 - ✅ **SpamAssassin Integration**: Spam filtering with configurable policies
@@ -308,7 +315,15 @@
     - [x] Message deletion with file rewrite
     - [x] "From " line escaping/unescaping
     - [x] Thread-safe operations
-  - [ ] Database storage
+  - [x] Database storage
+    - [x] SQLite message storage schema
+    - [x] Store/retrieve/delete operations
+    - [x] Message listing with pagination
+    - [x] Folder management
+    - [x] IMAP-style message flags
+    - [x] Full-text search
+    - [x] Message count queries
+    - [x] Thread-safe operations
   - [x] S3/object storage
     - [x] S3 key generation with date partitioning
     - [x] Store/retrieve/delete message operations
@@ -358,7 +373,14 @@
   - [x] Peek and consume operations
   - [x] Delimiter-based parsing (consumeUntil)
   - [x] Buffer compaction
-- [ ] Async I/O with io_uring (Linux)
+- [x] Async I/O with io_uring (Linux)
+  - [x] io_uring framework implementation
+  - [x] Async accept/read/write/recv/send operations
+  - [x] Completion queue handling
+  - [x] Async SMTP connection handler
+  - [x] Error mapping and handling
+  - [x] Connection state management
+  - [ ] Full io_uring syscall integration (requires Linux 5.1+)
 - [x] Performance benchmarking suite
   - [x] Benchmark framework with warmup
   - [x] SMTP-specific benchmarks (email validation, base64, parsing)
@@ -501,7 +523,14 @@
   - [x] Binary MIME part handling
   - [x] 8BITMIME and BINARYMIME capability advertisement
   - [x] Comprehensive test coverage
-- [ ] DELIVERBY extension (RFC 2852)
+- [x] DELIVERBY extension (RFC 2852)
+  - [x] BY parameter parsing from MAIL FROM
+  - [x] Deadline validation and calculation
+  - [x] Notify mode support (R/N/T)
+  - [x] Timed message queue with priority
+  - [x] Deadline notification generation
+  - [x] Time remaining calculation
+  - [x] DELIVERBY capability advertisement
 - [x] DSN extension (RFC 3461)
   - [x] MAIL FROM RET parameter (FULL/HDRS)
   - [x] MAIL FROM ENVID parameter
@@ -520,7 +549,15 @@
   - [x] Queue processor implementation
   - [x] ETRN statistics tracking
   - [x] Comprehensive test coverage
-- [ ] ATRN support (RFC 2645)
+- [x] ATRN support (RFC 2645)
+  - [x] ATRN command parsing (single and multiple domains)
+  - [x] Domain authorization management
+  - [x] Authentication requirement enforcement
+  - [x] Role reversal protocol handling
+  - [x] Queue delivery statistics
+  - [x] Response code handling (250, 450, 453, 530)
+  - [x] Session state management
+  - [x] Comprehensive test coverage
 
 ### Developer Experience
 - [x] Comprehensive test suite
@@ -553,7 +590,19 @@
   - [x] Prometheus + Grafana integration
   - [x] Health checks
   - [x] Volume management
-- [ ] Kubernetes deployment manifests
+- [x] Kubernetes deployment manifests
+  - [x] Namespace configuration
+  - [x] ConfigMap for environment variables
+  - [x] Secret management
+  - [x] PersistentVolumeClaims (data + queue)
+  - [x] Deployment with 3 replicas
+  - [x] Service (LoadBalancer, health, metrics)
+  - [x] HorizontalPodAutoscaler (CPU/memory based)
+  - [x] PodDisruptionBudget for HA
+  - [x] NetworkPolicy for security
+  - [x] ServiceMonitor for Prometheus
+  - [x] Kustomization file
+  - [x] Comprehensive documentation
 - [ ] Ansible playbook for deployment
 - [ ] Documentation
   - [ ] API documentation
@@ -633,7 +682,7 @@
 ## Project Information
 
 **Last Updated**: 2025-10-23 (current date)
-**Current Version**: v0.10.0
+**Current Version**: v0.11.0
 **Zig Version**: 0.15.1
 **License**: MIT
 
