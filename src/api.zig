@@ -3,6 +3,7 @@ const database = @import("database.zig");
 const auth_mod = @import("auth.zig");
 const queue_mod = @import("queue.zig");
 const filter_mod = @import("filter.zig");
+const search_mod = @import("search.zig");
 
 /// REST API server for SMTP management
 pub const APIServer = struct {
@@ -12,6 +13,7 @@ pub const APIServer = struct {
     auth_backend: *auth_mod.AuthBackend,
     message_queue: *queue_mod.MessageQueue,
     filter_engine: *filter_mod.FilterEngine,
+    search_engine: ?*search_mod.MessageSearch,
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -20,6 +22,7 @@ pub const APIServer = struct {
         auth_backend: *auth_mod.AuthBackend,
         message_queue: *queue_mod.MessageQueue,
         filter_engine: *filter_mod.FilterEngine,
+        search_engine: ?*search_mod.MessageSearch,
     ) APIServer {
         return .{
             .allocator = allocator,
@@ -28,6 +31,7 @@ pub const APIServer = struct {
             .auth_backend = auth_backend,
             .message_queue = message_queue,
             .filter_engine = filter_engine,
+            .search_engine = search_engine,
         };
     }
 
@@ -73,6 +77,10 @@ pub const APIServer = struct {
                 try self.handleGetQueue(stream);
             } else if (std.mem.startsWith(u8, path, "/api/filters")) {
                 try self.handleGetFilters(stream);
+            } else if (std.mem.startsWith(u8, path, "/api/search")) {
+                try self.handleSearch(stream, path);
+            } else if (std.mem.startsWith(u8, path, "/api/search/stats")) {
+                try self.handleSearchStats(stream);
             } else {
                 try self.send404(stream);
             }
@@ -81,6 +89,8 @@ pub const APIServer = struct {
                 try self.handleCreateUser(stream, request);
             } else if (std.mem.startsWith(u8, path, "/api/filters")) {
                 try self.handleCreateFilter(stream, request);
+            } else if (std.mem.startsWith(u8, path, "/api/search/rebuild")) {
+                try self.handleRebuildSearchIndex(stream);
             } else {
                 try self.send404(stream);
             }
@@ -220,6 +230,227 @@ pub const APIServer = struct {
         defer self.allocator.free(response);
 
         _ = try stream.write(response);
+    }
+
+    fn handleSearch(self: *APIServer, stream: std.net.Stream, path: []const u8) !void {
+        if (self.search_engine == null) {
+            const json = "{\"error\":\"Search functionality not enabled\"}";
+            const response = try std.fmt.allocPrint(
+                self.allocator,
+                "HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nContent-Length: {d}\r\n\r\n{s}",
+                .{ json.len, json },
+            );
+            defer self.allocator.free(response);
+            _ = try stream.write(response);
+            return;
+        }
+
+        // Parse query parameters from URL
+        // Example: /api/search?q=test&email=user@example.com&limit=50
+        var query: ?[]const u8 = null;
+        var options = search_mod.MessageSearch.SearchOptions{};
+
+        if (std.mem.indexOf(u8, path, "?")) |query_start| {
+            const query_string = path[query_start + 1 ..];
+            var params = std.mem.splitScalar(u8, query_string, '&');
+
+            while (params.next()) |param| {
+                if (std.mem.indexOf(u8, param, "=")) |eq_pos| {
+                    const key = param[0..eq_pos];
+                    const value = param[eq_pos + 1 ..];
+
+                    if (std.mem.eql(u8, key, "q")) {
+                        query = try self.urlDecode(value);
+                    } else if (std.mem.eql(u8, key, "email")) {
+                        options.email = try self.urlDecode(value);
+                    } else if (std.mem.eql(u8, key, "folder")) {
+                        options.folder = try self.urlDecode(value);
+                    } else if (std.mem.eql(u8, key, "limit")) {
+                        options.limit = std.fmt.parseInt(usize, value, 10) catch 100;
+                    } else if (std.mem.eql(u8, key, "offset")) {
+                        options.offset = std.fmt.parseInt(usize, value, 10) catch 0;
+                    } else if (std.mem.eql(u8, key, "from_date")) {
+                        options.from_date = std.fmt.parseInt(i64, value, 10) catch null;
+                    } else if (std.mem.eql(u8, key, "to_date")) {
+                        options.to_date = std.fmt.parseInt(i64, value, 10) catch null;
+                    } else if (std.mem.eql(u8, key, "attachments") and std.mem.eql(u8, value, "true")) {
+                        options.has_attachments = true;
+                    }
+                }
+            }
+        }
+
+        if (query == null or query.?.len == 0) {
+            const json = "{\"error\":\"Missing query parameter 'q'\"}";
+            const response = try std.fmt.allocPrint(
+                self.allocator,
+                "HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nContent-Length: {d}\r\n\r\n{s}",
+                .{ json.len, json },
+            );
+            defer self.allocator.free(response);
+            _ = try stream.write(response);
+            return;
+        }
+
+        // Perform search
+        var results = try self.search_engine.?.search(query.?, options);
+        defer {
+            for (results.items) |*result| {
+                result.deinit(self.allocator);
+            }
+            results.deinit();
+        }
+
+        // Build JSON response
+        var json = std.array_list.Managed(u8).init(self.allocator);
+        defer json.deinit();
+
+        try json.appendSlice("{\"results\":[");
+
+        for (results.items, 0..) |result, i| {
+            if (i > 0) try json.appendSlice(",");
+            try std.fmt.format(json.writer(),
+                \\{{"id":{d},"message_id":"{s}","email":"{s}","sender":"{s}","subject":"{s}","snippet":"{s}","received_at":{d},"size":{d},"folder":"{s}"
+            , .{
+                result.id,
+                result.message_id,
+                result.email,
+                result.sender,
+                result.subject,
+                result.body_snippet,
+                result.received_at,
+                result.size,
+                result.folder,
+            });
+
+            if (result.relevance_score) |score| {
+                try std.fmt.format(json.writer(), ",\"relevance\":{d:.2}", .{score});
+            }
+
+            try json.appendSlice("}");
+        }
+
+        try std.fmt.format(json.writer(), "],\"count\":{d}}}", .{results.items.len});
+
+        const response = try std.fmt.allocPrint(
+            self.allocator,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {d}\r\n\r\n{s}",
+            .{ json.items.len, json.items },
+        );
+        defer self.allocator.free(response);
+
+        _ = try stream.write(response);
+    }
+
+    fn handleSearchStats(self: *APIServer, stream: std.net.Stream) !void {
+        if (self.search_engine == null) {
+            const json = "{\"error\":\"Search functionality not enabled\"}";
+            const response = try std.fmt.allocPrint(
+                self.allocator,
+                "HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nContent-Length: {d}\r\n\r\n{s}",
+                .{ json.len, json },
+            );
+            defer self.allocator.free(response);
+            _ = try stream.write(response);
+            return;
+        }
+
+        const stats = try self.search_engine.?.getStatistics();
+
+        const json = try std.fmt.allocPrint(
+            self.allocator,
+            \\{{"total_messages":{d},"total_size":{d},"unique_senders":{d},"total_folders":{d},"oldest_message":{d},"newest_message":{d},"fts_enabled":{s}}}
+        ,
+            .{
+                stats.total_messages,
+                stats.total_size,
+                stats.unique_senders,
+                stats.total_folders,
+                stats.oldest_message,
+                stats.newest_message,
+                if (stats.fts_enabled) "true" else "false",
+            },
+        );
+        defer self.allocator.free(json);
+
+        const response = try std.fmt.allocPrint(
+            self.allocator,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {d}\r\n\r\n{s}",
+            .{ json.len, json },
+        );
+        defer self.allocator.free(response);
+
+        _ = try stream.write(response);
+    }
+
+    fn handleRebuildSearchIndex(self: *APIServer, stream: std.net.Stream) !void {
+        if (self.search_engine == null) {
+            const json = "{\"error\":\"Search functionality not enabled\"}";
+            const response = try std.fmt.allocPrint(
+                self.allocator,
+                "HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nContent-Length: {d}\r\n\r\n{s}",
+                .{ json.len, json },
+            );
+            defer self.allocator.free(response);
+            _ = try stream.write(response);
+            return;
+        }
+
+        self.search_engine.?.rebuildIndex() catch |err| {
+            const json = try std.fmt.allocPrint(
+                self.allocator,
+                "{{\"error\":\"Failed to rebuild index: {}\"}}",
+                .{err},
+            );
+            defer self.allocator.free(json);
+
+            const response = try std.fmt.allocPrint(
+                self.allocator,
+                "HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: {d}\r\n\r\n{s}",
+                .{ json.len, json },
+            );
+            defer self.allocator.free(response);
+            _ = try stream.write(response);
+            return;
+        };
+
+        const json = "{\"message\":\"Search index rebuilt successfully\"}";
+        const response = try std.fmt.allocPrint(
+            self.allocator,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {d}\r\n\r\n{s}",
+            .{ json.len, json },
+        );
+        defer self.allocator.free(response);
+
+        _ = try stream.write(response);
+    }
+
+    fn urlDecode(self: *APIServer, encoded: []const u8) ![]const u8 {
+        // Simple URL decoding - replace + with space and handle %XX encoding
+        var decoded = std.array_list.Managed(u8).init(self.allocator);
+        errdefer decoded.deinit();
+
+        var i: usize = 0;
+        while (i < encoded.len) {
+            if (encoded[i] == '+') {
+                try decoded.append(' ');
+                i += 1;
+            } else if (encoded[i] == '%' and i + 2 < encoded.len) {
+                const hex = encoded[i + 1 .. i + 3];
+                const byte = std.fmt.parseInt(u8, hex, 16) catch {
+                    try decoded.append(encoded[i]);
+                    i += 1;
+                    continue;
+                };
+                try decoded.append(byte);
+                i += 3;
+            } else {
+                try decoded.append(encoded[i]);
+                i += 1;
+            }
+        }
+
+        return decoded.toOwnedSlice();
     }
 
     fn send404(self: *APIServer, stream: std.net.Stream) !void {

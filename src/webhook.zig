@@ -1,5 +1,6 @@
 const std = @import("std");
 const logger = @import("logger.zig");
+const tls = @import("tls");
 
 pub const WebhookConfig = struct {
     url: ?[]const u8,
@@ -50,16 +51,11 @@ pub fn sendWebhook(allocator: std.mem.Allocator, cfg: WebhookConfig, payload: We
     };
 
     // Determine if HTTPS
-    const use_tls = std.mem.eql(u8, uri.scheme, "https");
-
-    if (use_tls) {
-        log.warn("HTTPS webhooks not yet implemented, skipping", .{});
-        return error.HttpsNotSupported;
-    }
+    const use_tls_flag = std.mem.eql(u8, uri.scheme, "https");
 
     // Get host and port
     const host = uri.host.?.percent_encoded;
-    const port: u16 = uri.port orelse if (use_tls) 443 else 80;
+    const port: u16 = uri.port orelse if (use_tls_flag) 443 else 80;
 
     // Connect to webhook server
     var address: std.net.Address = undefined;
@@ -94,11 +90,22 @@ pub fn sendWebhook(allocator: std.mem.Allocator, cfg: WebhookConfig, payload: We
         "Content-Type: application/json\r\n" ++
         "Content-Length: {d}\r\n" ++
         "User-Agent: SMTP-Server-Zig/1.0\r\n" ++
+        "Connection: close\r\n" ++
         "\r\n" ++
         "{s}",
         .{ path, host, json_buf.items.len, json_buf.items },
     );
 
+    if (use_tls_flag) {
+        // HTTPS request
+        try sendHttpsRequest(allocator, stream, request, host, url, log);
+    } else {
+        // HTTP request
+        try sendHttpRequest(stream, request, url, log);
+    }
+}
+
+fn sendHttpRequest(stream: std.net.Stream, request: []const u8, url: []const u8, log: *logger.Logger) !void {
     // Send request
     _ = stream.write(request) catch |err| {
         log.err("Failed to send webhook request: {}", .{err});
@@ -115,10 +122,62 @@ pub fn sendWebhook(allocator: std.mem.Allocator, cfg: WebhookConfig, payload: We
     if (bytes_read > 0) {
         const response = response_buf[0..bytes_read];
         if (std.mem.indexOf(u8, response, "HTTP/1") != null) {
-            if (std.mem.indexOf(u8, response, "200") != null or std.mem.indexOf(u8, response, "201") != null or std.mem.indexOf(u8, response, "202") != null) {
+            if (std.mem.indexOf(u8, response, "200") != null or
+               std.mem.indexOf(u8, response, "201") != null or
+               std.mem.indexOf(u8, response, "202") != null) {
                 log.info("Webhook delivered successfully to {s}", .{url});
             } else {
                 log.warn("Webhook returned non-2xx status: {s}", .{response[0..@min(100, response.len)]});
+            }
+        }
+    }
+}
+
+fn sendHttpsRequest(
+    allocator: std.mem.Allocator,
+    stream: std.net.Stream,
+    request: []const u8,
+    hostname: []const u8,
+    url: []const u8,
+    log: *logger.Logger,
+) !void {
+    _ = allocator; // TLS library will handle allocation internally
+
+    // Initialize TLS client connection from stream
+    // For webhook HTTPS, we skip certificate verification for simplicity
+    // In production, you may want to provide proper root CAs
+    var tls_conn = tls.clientFromStream(stream, .{
+        .host = hostname,
+        .root_ca = .{},
+        .insecure_skip_verify = true,
+    }) catch |err| {
+        log.err("Failed to initialize TLS client: {}", .{err});
+        return error.TlsInitFailed;
+    };
+    defer tls_conn.close() catch {};
+
+    // Send HTTPS request
+    tls_conn.writeAll(request) catch |err| {
+        log.err("Failed to send HTTPS webhook request: {}", .{err});
+        return error.WebhookSendFailed;
+    };
+
+    // Read response
+    var response_buf: [1024]u8 = undefined;
+    const bytes_read = tls_conn.read(&response_buf) catch |err| {
+        log.warn("Failed to read HTTPS webhook response: {}", .{err});
+        return; // Don't fail on response read errors
+    };
+
+    if (bytes_read > 0) {
+        const response = response_buf[0..bytes_read];
+        if (std.mem.indexOf(u8, response, "HTTP/1") != null) {
+            if (std.mem.indexOf(u8, response, "200") != null or
+               std.mem.indexOf(u8, response, "201") != null or
+               std.mem.indexOf(u8, response, "202") != null) {
+                log.info("HTTPS webhook delivered successfully to {s}", .{url});
+            } else {
+                log.warn("HTTPS webhook returned non-2xx status: {s}", .{response[0..@min(100, response.len)]});
             }
         }
     }

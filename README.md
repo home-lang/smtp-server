@@ -326,6 +326,53 @@ This project follows Zig's standard formatting:
 zig fmt src/
 ```
 
+### Release Process
+
+This project uses [zig-bump](https://github.com/stacksjs/zig-bump) for version management and automated releases.
+
+#### Quick Release (Recommended)
+
+The easiest way - an interactive script that guides you through the release:
+
+```bash
+./scripts/release.sh
+# or
+make release
+```
+
+This provides a beautiful interactive menu with:
+- Pre-release checklist
+- Version selection with visual preview
+- Dry-run option
+- Confirmation before release
+- Automatic CHANGELOG.md reminder
+
+#### Direct Commands
+
+If you prefer direct commands:
+
+```bash
+# Native Zig build (cross-platform)
+zig build bump-patch       # Bug fixes (0.0.1 -> 0.0.2)
+zig build bump-minor       # New features (0.0.1 -> 0.1.0)
+zig build bump-major       # Breaking changes (0.0.1 -> 1.0.0)
+zig build bump             # Interactive selection
+zig build bump-patch-dry   # Preview changes
+
+# Or using Makefile shortcuts
+make release-patch         # Same as zig build bump-patch
+make release-minor         # Same as zig build bump-minor
+make release-major         # Same as zig build bump-major
+```
+
+When you bump the version, it will:
+1. Update `build.zig.zon`
+2. Create a git commit and tag
+3. Push to GitHub
+4. Trigger the release workflow to build binaries and Docker images
+
+See [docs/RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md) for detailed release documentation.
+
 ## Roadmap
 
 - [ ] Full TLS/STARTTLS implementation

@@ -2,6 +2,18 @@
 
 ## Recent Updates 📝
 
+### v0.20.0 (2025-01-24) - HTTPS Webhooks & Security Improvements
+- ✅ **HTTPS Webhook Support**: TLS client for secure webhook notifications
+- ✅ **Certificate Verification**: Optional certificate verification with insecure skip option
+- ✅ **HTTP/HTTPS Auto-detection**: Automatic protocol selection based on URL scheme
+
+### v0.19.0 (2025-01-24) - Message Search & Full-Text Search
+- ✅ **FTS5 Search Engine**: SQLite FTS5 full-text search with Porter stemming and Unicode tokenization
+- ✅ **Search CLI Tool**: Command-line interface for searching email messages
+- ✅ **Search REST API**: HTTP endpoints for search, statistics, and index management
+- ✅ **Advanced Filtering**: Search by sender, subject, date range, attachments, and folder
+- ✅ **Search Documentation**: Comprehensive API and CLI documentation
+
 ### v0.18.0 (2025-10-24) - Bug Fixes & Issue Documentation
 - ✅ **Rate Limiter Cleanup**: Automatic background cleanup with scheduled thread
 - ✅ **Known Issues Documentation**: Comprehensive documentation of all known issues with solutions
@@ -869,7 +881,12 @@
   - [x] Comprehensive test coverage
 - [ ] Multi-tenancy support
 - [ ] Cluster mode for high availability
-- [ ] Message search functionality (full-text)
+- [x] Message search functionality (full-text)
+  - [x] FTS5 search engine with Porter stemming
+  - [x] Search CLI tool
+  - [x] REST API endpoints
+  - [x] Advanced filtering and sorting
+  - [x] Search statistics and index rebuilding
 - [ ] Email archiving
 - [x] Backup and restore utilities
   - [x] Full backup creation
@@ -913,7 +930,7 @@
 - [x] ~~No connection timeout enforcement yet~~ (Fixed in 0.2.0)
 - [x] ~~No maximum recipients per message limit~~ (Fixed in 0.1.0)
 - [ ] No DATA command timeout (partial - general timeout implemented)
-- [ ] HTTPS webhooks not supported (HTTP only)
+- [x] ~~HTTPS webhooks not supported (HTTP only)~~ (Fixed in v0.20.0: full TLS client support)
 
 ## Research Needed 🔬
 

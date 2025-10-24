@@ -14,6 +14,66 @@ pub const DatabaseError = error{
     AlreadyExists,
 };
 
+pub const Statement = struct {
+    stmt: *sqlite.sqlite3_stmt,
+    allocator: std.mem.Allocator,
+
+    pub fn finalize(self: Statement) void {
+        _ = sqlite.sqlite3_finalize(self.stmt);
+    }
+
+    pub fn bind(self: Statement, index: usize, value: anytype) !void {
+        const T = @TypeOf(value);
+        const rc = switch (@typeInfo(T)) {
+            .int => sqlite.sqlite3_bind_int64(self.stmt, @intCast(index), @intCast(value)),
+            .comptime_int => sqlite.sqlite3_bind_int64(self.stmt, @intCast(index), @intCast(value)),
+            .float => sqlite.sqlite3_bind_double(self.stmt, @intCast(index), @floatCast(value)),
+            .comptime_float => sqlite.sqlite3_bind_double(self.stmt, @intCast(index), @floatCast(value)),
+            .pointer => |ptr_info| blk: {
+                if (ptr_info.size == .slice and ptr_info.child == u8) {
+                    const text_z = try self.allocator.dupeZ(u8, value);
+                    defer self.allocator.free(text_z);
+                    break :blk sqlite.sqlite3_bind_text(self.stmt, @intCast(index), text_z.ptr, -1, null);
+                }
+                @compileError("Unsupported pointer type for binding");
+            },
+            else => @compileError("Unsupported type for binding"),
+        };
+
+        if (rc != sqlite.SQLITE_OK) {
+            return DatabaseError.BindFailed;
+        }
+    }
+
+    pub fn step(self: Statement) !bool {
+        const rc = sqlite.sqlite3_step(self.stmt);
+        if (rc == sqlite.SQLITE_ROW) {
+            return true;
+        } else if (rc == sqlite.SQLITE_DONE) {
+            return false;
+        } else {
+            return DatabaseError.StepFailed;
+        }
+    }
+
+    pub fn columnInt64(self: Statement, index: usize) i64 {
+        return sqlite.sqlite3_column_int64(self.stmt, @intCast(index));
+    }
+
+    pub fn columnDouble(self: Statement, index: usize) f64 {
+        return sqlite.sqlite3_column_double(self.stmt, @intCast(index));
+    }
+
+    pub fn columnText(self: Statement, index: usize) []const u8 {
+        const text_ptr = sqlite.sqlite3_column_text(self.stmt, @intCast(index));
+        if (text_ptr) |ptr| {
+            const len = sqlite.sqlite3_column_bytes(self.stmt, @intCast(index));
+            return ptr[0..@intCast(len)];
+        }
+        return &[_]u8{};
+    }
+};
+
 pub const User = struct {
     id: i64,
     username: []const u8,
@@ -100,7 +160,7 @@ pub const Database = struct {
         self.exec(migration) catch {};
     }
 
-    fn exec(self: *Database, sql: []const u8) !void {
+    pub fn exec(self: *Database, sql: []const u8) !void {
         const sql_z = try self.allocator.dupeZ(u8, sql);
         defer self.allocator.free(sql_z);
 
@@ -113,6 +173,22 @@ pub const Database = struct {
             }
             return DatabaseError.ExecFailed;
         }
+    }
+
+    pub fn prepare(self: *Database, sql: []const u8) !Statement {
+        const sql_z = try self.allocator.dupeZ(u8, sql);
+        defer self.allocator.free(sql_z);
+
+        var stmt: ?*sqlite.sqlite3_stmt = null;
+        const rc = sqlite.sqlite3_prepare_v2(self.db, sql_z.ptr, -1, &stmt, null);
+        if (rc != sqlite.SQLITE_OK) {
+            return DatabaseError.PrepareFailed;
+        }
+
+        return Statement{
+            .stmt = stmt.?,
+            .allocator = self.allocator,
+        };
     }
 
     pub fn createUser(

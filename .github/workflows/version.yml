@@ -1,0 +1,73 @@
+name: Version Management
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      dry_run:
+        description: 'Dry run (preview changes without applying)'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  bump-version:
+    name: Bump Version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Setup Zig
+      uses: goto-bus-stop/setup-zig@v2
+      with:
+        version: 0.15.1
+
+    - name: Configure Git
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: Build zig-bump
+      run: |
+        cd ../
+        if [ ! -d "zig-bump" ]; then
+          git clone https://github.com/stacksjs/zig-bump.git
+        fi
+        cd zig-bump
+        zig build -Doptimize=ReleaseFast
+        sudo cp zig-out/bin/bump /usr/local/bin/
+        cd ../mail
+
+    - name: Bump version (dry-run)
+      if: ${{ inputs.dry_run }}
+      run: |
+        cd $GITHUB_WORKSPACE
+        bump ${{ inputs.release_type }} --dry-run
+
+    - name: Bump version and push
+      if: ${{ !inputs.dry_run }}
+      run: |
+        cd $GITHUB_WORKSPACE
+        bump ${{ inputs.release_type }} --all
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Show result
+      if: success()
+      run: |
+        echo "Version bump completed successfully!"
+        echo "New version tag has been pushed and will trigger the release workflow."

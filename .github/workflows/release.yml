@@ -87,8 +87,30 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Extract version from tag
+      id: version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
     - name: Download all artifacts
       uses: actions/download-artifact@v4
+
+    - name: Extract changelog entry
+      id: changelog
+      run: |
+        if [ -f "CHANGELOG.md" ]; then
+          # Try to extract the section for this version from CHANGELOG.md
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          CHANGELOG=$(awk "/## \[${VERSION}\]/,/## \[/" CHANGELOG.md | sed '$d' || echo "")
+          if [ -n "$CHANGELOG" ]; then
+            echo "RELEASE_NOTES<<EOF" >> $GITHUB_OUTPUT
+            echo "$CHANGELOG" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "RELEASE_NOTES=" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "RELEASE_NOTES=" >> $GITHUB_OUTPUT
+        fi
 
     - name: Create Release
       uses: softprops/action-gh-release@v1
@@ -97,8 +119,25 @@ jobs:
           smtp-server-x86_64-linux/smtp-server-x86_64-linux.tar.gz
           smtp-server-x86_64-macos/smtp-server-x86_64-macos.tar.gz
           smtp-server-aarch64-macos/smtp-server-aarch64-macos.tar.gz
+        body: |
+          ${{ steps.changelog.outputs.RELEASE_NOTES }}
+
+          ## Release Info
+          - Version: ${{ steps.version.outputs.VERSION }}
+          - Docker Image: `${{ secrets.DOCKER_USERNAME }}/smtp-server:${{ steps.version.outputs.VERSION }}`
+
+          ## Installation
+
+          Download the appropriate binary for your platform from the assets below.
+
+          ### Docker
+          ```bash
+          docker pull ${{ secrets.DOCKER_USERNAME }}/smtp-server:${{ steps.version.outputs.VERSION }}
+          ```
+
+          🦎 This release was created using [zig-bump](https://github.com/stacksjs/zig-bump)
         draft: false
         prerelease: false
-        generate_release_notes: true
+        generate_release_notes: ${{ steps.changelog.outputs.RELEASE_NOTES == '' }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

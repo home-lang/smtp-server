@@ -14,6 +14,14 @@ pub fn build(b: *std.Build) void {
     });
     const tls_module = tls.module("tls");
 
+    // Add zig-bump dependency for version management
+    const bump = b.dependency("bump", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const bump_exe = bump.artifact("bump");
+    b.installArtifact(bump_exe);
+
     if (build_all_targets) {
         // Build for all supported targets
         const targets = [_]std.Build.ResolvedTarget{
@@ -124,6 +132,21 @@ pub fn build(b: *std.Build) void {
     gdpr_cli.linkSystemLibrary("sqlite3");
     b.installArtifact(gdpr_cli);
 
+    // Search CLI tool
+    const search_cli_module = b.createModule(.{
+        .root_source_file = b.path("src/search_cli.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const search_cli = b.addExecutable(.{
+        .name = "search-cli",
+        .root_module = search_cli_module,
+    });
+    search_cli.linkLibC();
+    search_cli.linkSystemLibrary("sqlite3");
+    b.installArtifact(search_cli);
+
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
 
@@ -221,6 +244,62 @@ pub fn build(b: *std.Build) void {
     if (build_all_targets) {
         cross_step.dependOn(b.getInstallStep());
     }
+
+    // Version management steps using zig-bump
+    addVersionManagementSteps(b, bump_exe);
+}
+
+/// Add version management build steps
+fn addVersionManagementSteps(b: *std.Build, bump_exe: *std.Build.Step.Compile) void {
+    // Install zig-bump step
+    const install_bump_step = b.step("install-bump", "Install zig-bump for version management");
+    install_bump_step.dependOn(&b.addInstallArtifact(bump_exe, .{}).step);
+
+    // Bump patch version
+    const bump_patch = b.addRunArtifact(bump_exe);
+    bump_patch.addArg("patch");
+    const bump_patch_step = b.step("bump-patch", "Bump patch version (0.0.1 -> 0.0.2)");
+    bump_patch_step.dependOn(install_bump_step);
+    bump_patch_step.dependOn(&bump_patch.step);
+
+    // Bump minor version
+    const bump_minor = b.addRunArtifact(bump_exe);
+    bump_minor.addArg("minor");
+    const bump_minor_step = b.step("bump-minor", "Bump minor version (0.0.1 -> 0.1.0)");
+    bump_minor_step.dependOn(install_bump_step);
+    bump_minor_step.dependOn(&bump_minor.step);
+
+    // Bump major version
+    const bump_major = b.addRunArtifact(bump_exe);
+    bump_major.addArg("major");
+    const bump_major_step = b.step("bump-major", "Bump major version (0.0.1 -> 1.0.0)");
+    bump_major_step.dependOn(install_bump_step);
+    bump_major_step.dependOn(&bump_major.step);
+
+    // Interactive bump
+    const bump_interactive = b.addRunArtifact(bump_exe);
+    const bump_interactive_step = b.step("bump", "Interactively select version to bump");
+    bump_interactive_step.dependOn(install_bump_step);
+    bump_interactive_step.dependOn(&bump_interactive.step);
+
+    // Dry-run versions (for testing)
+    const bump_patch_dry = b.addRunArtifact(bump_exe);
+    bump_patch_dry.addArgs(&[_][]const u8{ "patch", "--dry-run" });
+    const bump_patch_dry_step = b.step("bump-patch-dry", "Preview patch version bump");
+    bump_patch_dry_step.dependOn(install_bump_step);
+    bump_patch_dry_step.dependOn(&bump_patch_dry.step);
+
+    const bump_minor_dry = b.addRunArtifact(bump_exe);
+    bump_minor_dry.addArgs(&[_][]const u8{ "minor", "--dry-run" });
+    const bump_minor_dry_step = b.step("bump-minor-dry", "Preview minor version bump");
+    bump_minor_dry_step.dependOn(install_bump_step);
+    bump_minor_dry_step.dependOn(&bump_minor_dry.step);
+
+    const bump_major_dry = b.addRunArtifact(bump_exe);
+    bump_major_dry.addArgs(&[_][]const u8{ "major", "--dry-run" });
+    const bump_major_dry_step = b.step("bump-major-dry", "Preview major version bump");
+    bump_major_dry_step.dependOn(install_bump_step);
+    bump_major_dry_step.dependOn(&bump_major_dry.step);
 }
 
 /// Build executable for a specific target platform

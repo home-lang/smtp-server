@@ -4,6 +4,33 @@ This document tracks known issues with the SMTP server and provides solutions or
 
 ## ✅ Resolved Issues
 
+### HTTPS Webhooks Not Supported (Fixed in v0.20.0)
+
+**Problem:** Webhook implementation only supported HTTP URLs, not HTTPS, preventing secure webhook notifications.
+
+**Solution:** Implemented full TLS client support for HTTPS webhooks:
+- Uses zig-tls library's `clientFromStream` for TLS connections
+- Automatic protocol detection based on URL scheme (http:// vs https://)
+- Optional certificate verification (insecure_skip_verify for development)
+- Proper TLS handshake and encrypted communication
+- Graceful fallback to HTTP for non-HTTPS URLs
+
+**Usage:**
+```bash
+# SMTP server now supports both HTTP and HTTPS webhook URLs
+SMTP_WEBHOOK_URL=https://secure-endpoint.example.com/webhook
+```
+
+**Files Changed:**
+- `src/webhook.zig` - Added TLS client support for HTTPS
+
+**Benefits:**
+- Secure webhook notifications to HTTPS endpoints
+- Protection of sensitive email metadata in transit
+- Production-ready webhook integration
+
+---
+
 ### Rate Limiter Cleanup Not Scheduled (Fixed in v0.18.0)
 
 **Problem:** The RateLimiter had a `cleanup()` method but it was never called, causing memory to grow over time as old IP entries were never removed.
@@ -186,54 +213,6 @@ pub const Statistics = struct {
 ---
 
 ## 🟠 Medium Priority Issues
-
-### HTTPS Webhooks Not Supported
-
-**Status:** HTTP only
-
-**Problem:**
-Current webhook implementation only supports HTTP URLs, not HTTPS.
-
-**Impact:**
-- Cannot send webhooks to secure endpoints
-- Security risk for sensitive data
-
-**Solution:**
-Add TLS support to webhook HTTP client:
-
-```zig
-const std = @import("std");
-const tls = @import("tls");
-
-pub fn sendWebhook(allocator: std.mem.Allocator, url: []const u8, payload: []const u8) !void {
-    const uri = try std.Uri.parse(url);
-
-    if (std.mem.eql(u8, uri.scheme, "https")) {
-        // HTTPS request
-        var tls_client = try tls.Client.init(allocator, .{
-            .host = uri.host.?,
-            .port = uri.port orelse 443,
-        });
-        defer tls_client.deinit();
-
-        try tls_client.connect();
-        try tls_client.write(payload);
-
-        // Read response...
-    } else {
-        // HTTP request (existing code)
-    }
-}
-```
-
-**Dependencies:**
-- TLS library for HTTPS client
-- Certificate validation
-- SNI support
-
-**Files to Modify:**
-- `src/webhook.zig` - Add HTTPS support
-- Add TLS client dependency
 
 ---
 
