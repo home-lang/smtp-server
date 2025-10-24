@@ -471,8 +471,6 @@ pub const Session = struct {
     }
 
     fn handleStartTls(self: *Session, writer: anytype) !void {
-        _ = writer;
-
         if (!self.config.enable_tls) {
             try self.sendResponse(writer, 454, "TLS not available", null);
             return;
@@ -497,7 +495,7 @@ pub const Session = struct {
         self.logger.info("STARTTLS command accepted - starting TLS handshake", .{});
 
         // Perform TLS handshake
-        var tls_conn = tls_mod.upgradeToTls(
+        const tls_conn = tls_mod.upgradeToTls(
             self.allocator,
             self.connection.stream,
             self.tls_context.?,

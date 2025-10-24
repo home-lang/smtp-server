@@ -148,7 +148,7 @@ pub fn upgradeToTls(
     defer auth.deinit(allocator);
 
     // Perform TLS handshake
-    const tls_conn = tls.server(stream, .{
+    const tls_conn = tls.serverFromStream(stream, .{
         .auth = &auth,
     }) catch |err| {
         log.err("TLS handshake failed: {}", .{err});
