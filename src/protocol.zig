@@ -4,6 +4,8 @@ const config = @import("config.zig");
 const auth = @import("auth.zig");
 const logger = @import("logger.zig");
 const security = @import("security.zig");
+const webhook = @import("webhook.zig");
+const tls_mod = @import("tls.zig");
 
 const SMTPCommand = enum {
     HELO,
@@ -40,6 +42,11 @@ pub const Session = struct {
     logger: *logger.Logger,
     remote_addr: []const u8,
     rate_limiter: *security.RateLimiter,
+    start_time: i64,
+    last_activity: i64,
+    tls_context: ?*tls_mod.TlsContext,
+    tls_connection: ?tls_mod.TlsConnection,
+    using_tls: bool,
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -48,7 +55,9 @@ pub const Session = struct {
         log: *logger.Logger,
         remote_addr: []const u8,
         rate_limiter: *security.RateLimiter,
+        tls_context: ?*tls_mod.TlsContext,
     ) !Session {
+        const now = std.time.timestamp();
         return Session{
             .allocator = allocator,
             .connection = connection,
@@ -61,6 +70,11 @@ pub const Session = struct {
             .logger = log,
             .remote_addr = remote_addr,
             .rate_limiter = rate_limiter,
+            .start_time = now,
+            .last_activity = now,
+            .tls_context = tls_context,
+            .tls_connection = null,
+            .using_tls = false,
         };
     }
 
@@ -75,6 +89,24 @@ pub const Session = struct {
         if (self.client_hostname) |hostname| {
             self.allocator.free(hostname);
         }
+        if (self.tls_connection) |*tls_conn| {
+            var conn = tls_conn.*;
+            conn.deinit();
+        }
+    }
+
+    fn checkTimeout(self: *Session) !void {
+        const now = std.time.timestamp();
+        const elapsed = now - self.last_activity;
+
+        if (elapsed > self.config.timeout_seconds) {
+            self.logger.warn("Connection timeout after {d} seconds from {s}", .{ elapsed, self.remote_addr });
+            return error.ConnectionTimeout;
+        }
+    }
+
+    fn updateActivity(self: *Session) void {
+        self.last_activity = std.time.timestamp();
     }
 
     pub fn handle(self: *Session) !void {
@@ -85,6 +117,9 @@ pub const Session = struct {
         var line_pos: usize = 0;
 
         while (true) {
+            // Check for timeout before each read
+            try self.checkTimeout();
+
             // Read byte by byte until we hit \n
             const byte_read = self.connection.stream.read(line_buffer[line_pos .. line_pos + 1]) catch |err| {
                 if (err == error.EndOfStream) break;
@@ -101,6 +136,9 @@ pub const Session = struct {
                     line_buffer[0..line_pos];
 
                 line_pos = 0;
+
+                // Update activity timestamp
+                self.updateActivity();
 
                 if (line.len == 0) continue;
 
@@ -350,6 +388,28 @@ pub const Session = struct {
             message_data.items.len,
         );
 
+        // Send webhook notification if configured
+        if (self.config.webhook_enabled) {
+            const webhook_cfg = webhook.WebhookConfig{
+                .url = self.config.webhook_url,
+                .enabled = self.config.webhook_enabled,
+                .timeout_ms = 5000,
+            };
+
+            const payload = webhook.WebhookPayload{
+                .from = self.mail_from orelse "unknown",
+                .recipients = self.rcpt_to.items,
+                .size = message_data.items.len,
+                .timestamp = std.time.timestamp(),
+                .remote_addr = self.remote_addr,
+            };
+
+            // Send webhook in background (don't block on webhook delivery)
+            webhook.sendWebhook(self.allocator, webhook_cfg, payload, self.logger) catch |err| {
+                self.logger.warn("Webhook delivery failed: {}", .{err});
+            };
+        }
+
         try self.sendResponse(writer, 250, "OK: Message accepted for delivery", null);
 
         // Reset state for next message
@@ -411,9 +471,51 @@ pub const Session = struct {
     }
 
     fn handleStartTls(self: *Session, writer: anytype) !void {
-        // TLS implementation would go here
-        _ = try self.connection.stream.write("454 TLS not available\r\n");
         _ = writer;
+
+        if (!self.config.enable_tls) {
+            try self.sendResponse(writer, 454, "TLS not available", null);
+            return;
+        }
+
+        // Check if already using TLS
+        if (self.using_tls) {
+            try self.sendResponse(writer, 454, "TLS already active", null);
+            return;
+        }
+
+        // Check if we have TLS context
+        if (self.tls_context == null) {
+            self.logger.warn("STARTTLS requested but TLS not configured properly", .{});
+            try self.sendResponse(writer, 454, "TLS not available", null);
+            return;
+        }
+
+        // Send ready response before upgrading
+        try self.sendResponse(writer, 220, "Ready to start TLS", null);
+
+        self.logger.info("STARTTLS command accepted - starting TLS handshake", .{});
+
+        // Perform TLS handshake
+        var tls_conn = tls_mod.upgradeToTls(
+            self.allocator,
+            self.connection.stream,
+            self.tls_context.?,
+            self.logger,
+        ) catch |err| {
+            self.logger.err("TLS handshake failed: {}", .{err});
+            return err;
+        };
+
+        // Successfully upgraded to TLS
+        self.tls_connection = tls_conn;
+        self.using_tls = true;
+
+        // Reset session state after TLS upgrade as per RFC
+        self.state = .Initial;
+        self.authenticated = false;
+
+        self.logger.info("TLS upgrade successful - connection now encrypted", .{});
     }
 
     fn sendResponse(self: *Session, writer: anytype, code: u16, message: []const u8, extra: ?[]const u8) !void {

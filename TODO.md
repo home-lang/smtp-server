@@ -61,19 +61,25 @@
 
 ## In Progress 🚧
 
-- [ ] Create comprehensive test suite
-  - [ ] Test script for SMTP commands
-  - [ ] Rate limiting tests
-  - [ ] Max recipients tests
-  - [ ] Connection limit tests
+- [x] Create comprehensive test suite
+  - [x] Zig unit tests for core modules
+  - [x] Test script for SMTP commands (20 tests)
+  - [x] Rate limiting tests
+  - [x] Max recipients tests
+  - [x] Connection limit tests
+  - [x] Message size limit tests
+  - [x] Email validation tests
 
 ## High Priority 🔴
 
 ### Security & Authentication
-- [ ] Implement real TLS/STARTTLS with OpenSSL/BearSSL
-  - [ ] Certificate loading and validation
-  - [ ] Secure connection upgrade
-  - [ ] Perfect Forward Secrecy support
+- [x] TLS/STARTTLS Framework (v0.3.0)
+  - [x] Certificate loading and validation
+  - [x] STARTTLS command handler
+  - [x] TLS module with PEM validation
+  - [x] Comprehensive reverse proxy documentation
+  - [ ] Native TLS handshake (requires external crypto library)
+  - [ ] Perfect Forward Secrecy support (via reverse proxy)
 - [ ] Database-backed authentication
   - [ ] SQLite integration
   - [ ] PostgreSQL support
@@ -86,10 +92,10 @@
 - [ ] Implement greylisting
 
 ### Core Functionality
-- [ ] Environment variable configuration support
-- [ ] Per-IP rate limiting with time windows
-- [ ] Connection timeout enforcement
-- [ ] Maximum recipients per message limit
+- [x] Environment variable configuration support
+- [x] Per-IP rate limiting with time windows
+- [x] Connection timeout enforcement
+- [x] Maximum recipients per message limit
 
 ## Medium Priority 🟡
 
@@ -159,7 +165,7 @@
   - [ ] User management
 
 ### Advanced Features
-- [ ] Webhook notifications for incoming mail
+- [x] Webhook notifications for incoming mail (HTTP POST with JSON payload)
 - [ ] Message filtering/routing rules
 - [ ] Auto-responder support
 - [ ] Mailing list functionality
@@ -205,7 +211,7 @@
 - [ ] Windows support
 - [ ] BSD support (FreeBSD, OpenBSD)
 - [ ] ARM architecture support
-- [ ] IPv6 support
+- [x] IPv6 support (full dual-stack support)
 - [ ] Unix socket support
 
 ### Compliance & Standards
@@ -243,10 +249,11 @@
 - [ ] Need to verify thread safety of all shared resources
 - [ ] TLS handshake not implemented (placeholder only)
 - [ ] Authentication accepts any credentials (development mode)
-- [ ] No connection timeout enforcement yet
+- [x] ~~No connection timeout enforcement yet~~ (Fixed in 0.2.0)
 - [ ] Rate limiter cleanup not scheduled
-- [ ] No maximum recipients per message limit
-- [ ] No DATA command timeout
+- [x] ~~No maximum recipients per message limit~~ (Fixed in 0.1.0)
+- [ ] No DATA command timeout (partial - general timeout implemented)
+- [ ] HTTPS webhooks not supported (HTTP only)
 
 ## Research Needed 🔬
 

@@ -89,6 +89,86 @@ run_test "Multiple Recipients" "EHLO test\nMAIL FROM:<sender@example.com>\nRCPT 
 # Test 12: Authentication (PLAIN)
 run_test "AUTH Command" "EHLO test\nAUTH PLAIN\nQUIT\n" "235"
 
+# Test 13: Too many recipients (default limit is 100)
+echo ""
+echo -e "${YELLOW}Test 13: Too Many Recipients${NC}"
+TESTS_RUN=$((TESTS_RUN + 1))
+{
+    echo "EHLO test"
+    echo "MAIL FROM:<sender@example.com>"
+    # Try to add 101 recipients
+    for i in {1..101}; do
+        echo "RCPT TO:<recipient${i}@example.com>"
+    done
+    echo "QUIT"
+} | nc -w 10 "$HOST" "$PORT" > /tmp/smtp_test_output.txt 2>&1
+if grep -q "552" /tmp/smtp_test_output.txt; then
+    echo -e "${GREEN}✓ PASSED${NC} - Max recipients limit enforced"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+else
+    echo -e "${RED}✗ FAILED${NC} - Max recipients limit not enforced"
+    echo "Expected: 552 error code"
+    tail -20 /tmp/smtp_test_output.txt
+fi
+
+# Test 14: Large message size (default limit is 10MB)
+echo ""
+echo -e "${YELLOW}Test 14: Message Size Limit${NC}"
+TESTS_RUN=$((TESTS_RUN + 1))
+{
+    echo "EHLO test"
+    echo "MAIL FROM:<sender@example.com> SIZE=20000000"
+    echo "QUIT"
+} | nc -w 5 "$HOST" "$PORT" > /tmp/smtp_test_output.txt 2>&1
+if grep -q "552" /tmp/smtp_test_output.txt; then
+    echo -e "${GREEN}✓ PASSED${NC} - Message size limit enforced"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+else
+    echo -e "${RED}✗ FAILED${NC} - Message size limit not enforced"
+    echo "Expected: 552 error code"
+    cat /tmp/smtp_test_output.txt
+fi
+
+# Test 15: Rate limiting (send multiple messages from same IP)
+echo ""
+echo -e "${YELLOW}Test 15: Rate Limiting (Quick Burst)${NC}"
+TESTS_RUN=$((TESTS_RUN + 1))
+echo "Sending 10 messages rapidly..."
+success_count=0
+rate_limited=0
+for i in {1..10}; do
+    result=$(echo -e "EHLO test\nMAIL FROM:<sender@example.com>\nRCPT TO:<recipient@example.com>\nDATA\nSubject: Test $i\n\nMessage $i\n.\nQUIT\n" | nc -w 5 "$HOST" "$PORT" 2>&1)
+    if echo "$result" | grep -q "250 OK: Message accepted"; then
+        success_count=$((success_count + 1))
+    fi
+    if echo "$result" | grep -q "451.*Rate limit"; then
+        rate_limited=1
+    fi
+    sleep 0.1
+done
+echo "Messages accepted: $success_count/10"
+if [ $success_count -ge 8 ]; then
+    echo -e "${GREEN}✓ PASSED${NC} - Rate limiter allows normal traffic"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+else
+    echo -e "${RED}✗ FAILED${NC} - Rate limiter too aggressive"
+fi
+
+# Test 16: Invalid email address format
+run_test "Invalid Email Format" "EHLO test\nMAIL FROM:<invalid-email>\nQUIT\n" "501"
+
+# Test 17: Empty MAIL FROM
+run_test "Empty MAIL FROM" "EHLO test\nMAIL FROM:<>\nQUIT\n" "250"
+
+# Test 18: Case insensitivity of commands
+run_test "Lowercase Commands" "ehlo test\nmail from:<sender@example.com>\nquit\n" "250"
+
+# Test 19: VRFY command (should be disabled for security)
+run_test "VRFY Command" "EHLO test\nVRFY user@example.com\nQUIT\n" "252"
+
+# Test 20: EXPN command (should be disabled for security)
+run_test "EXPN Command" "EHLO test\nEXPN mailing-list\nQUIT\n" "252"
+
 echo ""
 echo "===================================="
 echo "Test Results:"
@@ -103,3 +183,6 @@ else
     echo -e "${RED}Some tests failed.${NC}"
     exit 1
 fi
+
+# Cleanup
+rm -f /tmp/smtp_test_output.txt

@@ -16,6 +16,15 @@
 
 # Start on all interfaces
 ./zig-out/bin/smtp-server --host 0.0.0.0 --port 2525
+
+# IPv6 localhost
+./zig-out/bin/smtp-server --host "::1" --port 2525
+
+# IPv6 all interfaces
+./zig-out/bin/smtp-server --host "::" --port 2525
+
+# Dual-stack (IPv4 and IPv6)
+./zig-out/bin/smtp-server --host "::" --port 2525  # On most systems, this binds to both
 ```
 
 ### Configuration via Environment Variables
@@ -480,4 +489,46 @@ transporter.sendMail({
     echo "."
     echo "QUIT"
 } | nc localhost 2525
+```
+
+### Webhook Notifications
+
+```bash
+# Set up a simple webhook receiver (using Python)
+python3 -c "
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import json
+
+class WebhookHandler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        content_length = int(self.headers['Content-Length'])
+        body = self.rfile.read(content_length)
+        data = json.loads(body)
+
+        print(f'Mail from: {data[\"from\"]}')
+        print(f'Recipients: {data[\"recipients\"]}')
+        print(f'Size: {data[\"size\"]} bytes')
+        print(f'Timestamp: {data[\"timestamp\"]}')
+        print('---')
+
+        self.send_response(200)
+        self.end_headers()
+
+HTTPServer(('', 8080), WebhookHandler).serve_forever()
+" &
+
+# Start SMTP server with webhook
+export SMTP_WEBHOOK_URL="http://localhost:8080/webhook"
+./zig-out/bin/smtp-server
+```
+
+Webhook JSON payload format:
+```json
+{
+  "from": "sender@example.com",
+  "recipients": ["recipient1@example.com", "recipient2@example.com"],
+  "size": 1234,
+  "timestamp": 1698765432,
+  "remote_addr": "192.168.1.100"
+}
 ```

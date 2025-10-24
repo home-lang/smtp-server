@@ -14,12 +14,15 @@ pub const Config = struct {
     rate_limit_per_ip: u32,
     max_recipients: usize,
     hostname: []const u8,
+    webhook_url: ?[]const u8,
+    webhook_enabled: bool,
 
     pub fn deinit(self: Config, allocator: std.mem.Allocator) void {
         allocator.free(self.host);
         allocator.free(self.hostname);
         if (self.tls_cert_path) |path| allocator.free(path);
         if (self.tls_key_path) |path| allocator.free(path);
+        if (self.webhook_url) |url| allocator.free(url);
     }
 };
 
@@ -49,6 +52,8 @@ fn loadDefaults(allocator: std.mem.Allocator) !Config {
         .rate_limit_per_ip = 100, // messages per hour
         .max_recipients = 100,
         .hostname = try allocator.dupe(u8, "localhost"),
+        .webhook_url = null,
+        .webhook_enabled = false,
     };
 }
 
@@ -105,6 +110,18 @@ fn applyEnvironmentVariables(allocator: std.mem.Allocator, cfg: *Config) !void {
     if (std.posix.getenv("SMTP_TLS_KEY")) |value| {
         if (cfg.tls_key_path) |old| allocator.free(old);
         cfg.tls_key_path = try allocator.dupe(u8, value);
+    }
+
+    // SMTP_WEBHOOK_URL
+    if (std.posix.getenv("SMTP_WEBHOOK_URL")) |value| {
+        if (cfg.webhook_url) |old| allocator.free(old);
+        cfg.webhook_url = try allocator.dupe(u8, value);
+        cfg.webhook_enabled = true;
+    }
+
+    // SMTP_WEBHOOK_ENABLED
+    if (std.posix.getenv("SMTP_WEBHOOK_ENABLED")) |value| {
+        cfg.webhook_enabled = std.ascii.eqlIgnoreCase(value, "true") or std.ascii.eqlIgnoreCase(value, "1");
     }
 }
 

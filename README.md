@@ -4,22 +4,59 @@ A performant and secure SMTP server implementation written in Zig, designed for 
 
 ## Features
 
-- **RFC 5321 Compliant**: Implements the core SMTP protocol specification
+### Core SMTP
+
+- **RFC 5321 Compliant**: Full implementation of the core SMTP protocol
 - **Concurrent Connection Handling**: Multi-threaded design for handling multiple simultaneous connections
-- **Security Features**:
-  - Rate limiting per IP address
-  - Email address validation
-  - Input sanitization to prevent injection attacks
-  - Authentication support (PLAIN, LOGIN)
-  - STARTTLS support (framework ready, requires SSL certificates)
 - **ESMTP Extensions**:
   - SIZE - Message size declaration
   - 8BITMIME - 8-bit MIME transport
   - PIPELINING - Command pipelining
-  - AUTH - Authentication mechanisms
-  - STARTTLS - TLS encryption (when enabled)
-- **Performance Optimized**: Built with Zig for low memory footprint and high performance
-- **Maildir Storage**: Stores incoming messages in maildir format for easy processing
+  - AUTH - Authentication mechanisms (PLAIN, LOGIN)
+  - STARTTLS - TLS encryption framework (ready for certificates)
+
+### Security & Rate Limiting
+
+- **Per-IP Rate Limiting**: Sliding window rate limiter with configurable limits
+  - Thread-safe implementation with mutex protection
+  - Automatic cleanup of stale entries
+  - Real-time rate limit statistics
+- **Connection Limits**: Maximum concurrent connections enforcement
+- **Max Recipients**: Configurable limit on recipients per message
+- **Email Validation**: RFC-compliant email address validation
+- **Input Sanitization**: Protection against injection attacks
+- **Security Event Logging**: Dedicated logging for security-related events
+
+### Configuration & Operations
+
+- **Command-Line Interface**: Comprehensive CLI with help and version flags
+  - `--port`, `--host` - Server binding configuration
+  - `--log-level` - Adjust logging verbosity (debug|info|warn|error|critical)
+  - `--max-connections` - Connection limit override
+  - `--enable-tls/--disable-tls` - TLS toggle
+  - `--enable-auth/--disable-auth` - Authentication toggle
+- **Environment Variables**: Full configuration via environment variables
+  - `SMTP_HOST`, `SMTP_PORT`, `SMTP_HOSTNAME`
+  - `SMTP_MAX_CONNECTIONS`, `SMTP_MAX_RECIPIENTS`
+  - `SMTP_MAX_MESSAGE_SIZE`
+  - `SMTP_ENABLE_TLS`, `SMTP_ENABLE_AUTH`
+  - `SMTP_TLS_CERT`, `SMTP_TLS_KEY`
+- **Graceful Shutdown**: SIGINT/SIGTERM handlers with connection draining
+- **Comprehensive Logging**: Multi-level structured logging
+  - File-based logging with timestamps
+  - Colored console output
+  - Thread-safe operations
+  - SMTP-specific logging methods
+
+### Performance & Storage
+
+- **Performance Optimized**: Built with Zig for minimal overhead
+  - Zero-cost abstractions
+  - Compile-time optimizations
+  - <10MB memory footprint
+- **Maildir Storage**: Standard maildir format for message storage
+- **Connection Pooling**: Efficient resource management
+- **Active Connection Tracking**: Real-time monitoring of active sessions
 
 ## Requirements
 
@@ -35,14 +72,52 @@ zig build
 ## Running
 
 ```bash
-# Run the server
+# Run with defaults (0.0.0.0:2525)
 zig build run
 
 # Or run the compiled binary
 ./zig-out/bin/smtp-server
+
+# Show help
+./zig-out/bin/smtp-server --help
+
+# Show version
+./zig-out/bin/smtp-server --version
+
+# Run on custom port with debug logging
+./zig-out/bin/smtp-server --port 587 --log-level debug
+
+# Run with custom configuration
+./zig-out/bin/smtp-server --host 127.0.0.1 --port 2525 --max-connections 200
+
+# Run with IPv6
+./zig-out/bin/smtp-server --host "::1" --port 2525
+
+# Bind to all IPv6 addresses
+./zig-out/bin/smtp-server --host "::" --port 2525
+
+# Using environment variables
+export SMTP_PORT=2525
+export SMTP_MAX_CONNECTIONS=500
+export SMTP_HOSTNAME="mail.example.com"
+./zig-out/bin/smtp-server
+
+# IPv6 via environment
+export SMTP_HOST="::"
+./zig-out/bin/smtp-server
+
+# Enable webhook notifications
+export SMTP_WEBHOOK_URL="http://localhost:8080/webhook"
+./zig-out/bin/smtp-server
 ```
 
-The server will start on `0.0.0.0:2525` by default (non-privileged port for development).
+The server starts on `0.0.0.0:2525` by default (non-privileged port for development).
+
+**IPv6 Support**: The server fully supports IPv6. Use `::1` for localhost or `::` to bind to all IPv6 addresses.
+
+**Webhook Notifications**: Set `SMTP_WEBHOOK_URL` to receive HTTP POST notifications with JSON payload containing sender, recipients, size, and timestamp when mail is received.
+
+See [EXAMPLES.md](EXAMPLES.md) for more usage examples including Docker, systemd, and production deployments.
 
 ## Configuration
 
@@ -59,28 +134,64 @@ Configuration is managed in `src/config.zig`. Key settings include:
 - **timeout_seconds**: Connection timeout (default: 300s)
 - **rate_limit_per_ip**: Max messages per IP per hour (default: 100)
 - **hostname**: Server hostname (default: "localhost")
+- **webhook_url**: HTTP URL to POST on incoming mail (default: none)
+- **webhook_enabled**: Enable webhook notifications (default: false)
 
 ## Testing
 
-You can test the SMTP server using telnet or openssl:
+### Zig Unit Tests
+
+```bash
+# Run Zig unit tests
+zig build test
+```
+
+The project includes comprehensive unit tests for:
+- **Security Module**: Email validation, rate limiting, hostname validation
+- **Error Module**: SMTP error code mapping and error handling
+- **Config Module**: Configuration structure and validation
+
+### Integration Test Suite
+
+```bash
+# Run the automated SMTP integration tests
+./test-smtp.sh
+
+# Test against custom host/port
+SMTP_HOST=localhost SMTP_PORT=2525 ./test-smtp.sh
+```
+
+The integration test suite includes 20 comprehensive tests:
+- Basic SMTP commands (HELO/EHLO, MAIL FROM, RCPT TO, DATA)
+- Authentication testing
+- Rate limiting verification
+- Maximum recipients enforcement
+- Message size limit validation
+- Invalid command handling
+- Sequence validation
+- Case insensitivity
+
+### Manual Testing with telnet
 
 ```bash
 # Using telnet
 telnet localhost 2525
 
 # Example session:
-# EHLO client.example.com
-# MAIL FROM:<sender@example.com>
-# RCPT TO:<recipient@example.com>
-# DATA
-# Subject: Test Message
-#
-# This is a test message.
-# .
-# QUIT
+EHLO client.example.com
+MAIL FROM:<sender@example.com>
+RCPT TO:<recipient@example.com>
+DATA
+Subject: Test Message
+From: sender@example.com
+To: recipient@example.com
+
+This is a test message.
+.
+QUIT
 ```
 
-Or use a more sophisticated tool:
+### Testing with swaks
 
 ```bash
 # Using swaks (Swiss Army Knife for SMTP)
@@ -88,34 +199,68 @@ swaks --to recipient@example.com \
       --from sender@example.com \
       --server localhost:2525 \
       --body "Test message"
+
+# Test with authentication
+swaks --to recipient@example.com \
+      --from sender@example.com \
+      --server localhost:2525 \
+      --auth PLAIN \
+      --auth-user test \
+      --auth-password test
+
+# Test rate limiting (send multiple messages)
+for i in {1..105}; do
+    swaks --to test@example.com \
+          --from sender@example.com \
+          --server localhost:2525 \
+          --body "Message $i" \
+          --hide-all
+done
 ```
+
+See [EXAMPLES.md](EXAMPLES.md) for more testing examples and integration guides.
 
 ## Project Structure
 
 ```
 .
 ├── build.zig           # Build configuration
+├── test-smtp.sh        # Automated test suite
+├── EXAMPLES.md         # Comprehensive usage examples
+├── TLS.md              # TLS/STARTTLS setup guide
+├── TODO.md             # Development roadmap
 ├── src/
-│   ├── main.zig        # Entry point
-│   ├── smtp.zig        # SMTP server implementation
-│   ├── protocol.zig    # SMTP protocol handler
-│   ├── config.zig      # Configuration management
+│   ├── main.zig        # Entry point with CLI and signal handling
+│   ├── smtp.zig        # SMTP server with connection management
+│   ├── protocol.zig    # SMTP protocol handler (RFC 5321)
+│   ├── config.zig      # Configuration with env var support
+│   ├── args.zig        # Command-line argument parser
 │   ├── auth.zig        # Authentication mechanisms
-│   └── security.zig    # Security utilities (rate limiting, validation)
+│   ├── security.zig    # Rate limiting, validation, security
+│   ├── logger.zig      # Multi-level structured logging
+│   ├── errors.zig      # Custom error types and handling
+│   ├── webhook.zig     # Webhook notifications
+│   └── tls.zig         # TLS certificate management
 └── mail/
-    └── new/            # Incoming messages stored here
+    └── new/            # Incoming messages (maildir format)
 ```
 
 ## Security Considerations
 
 ### For Production Use
 
-1. **TLS/SSL**: Enable STARTTLS with valid certificates:
-   ```zig
-   .enable_tls = true,
-   .tls_cert_path = "/path/to/cert.pem",
-   .tls_key_path = "/path/to/key.pem",
+1. **TLS/SSL**: Deploy behind a reverse proxy (nginx, HAProxy) for TLS termination:
+   ```bash
+   # See TLS.md for complete setup guide
+   # Example with nginx on port 465 (SMTPS)
+   # Server runs on port 2525, nginx handles TLS
    ```
+
+   The server includes TLS configuration support but requires a reverse proxy for the cryptographic handshake. See [TLS.md](TLS.md) for detailed setup instructions including:
+   - nginx configuration with Let's Encrypt
+   - HAProxy setup
+   - Certificate management
+   - Self-signed certificates for development
 
 2. **Authentication**: The current implementation accepts all credentials. Implement proper credential verification in `src/auth.zig`:
    ```zig
@@ -163,10 +308,14 @@ sudo iptables -t nat -A PREROUTING -p tcp --dport 25 -j REDIRECT --to-port 2525
 
 ## Development
 
-### Running Tests
+### Running All Tests
 
 ```bash
+# Run Zig unit tests
 zig build test
+
+# Run integration tests (requires server running on port 2525)
+./test-smtp.sh
 ```
 
 ### Code Style

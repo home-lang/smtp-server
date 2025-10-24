@@ -5,6 +5,7 @@ const auth = @import("auth.zig");
 const protocol = @import("protocol.zig");
 const logger = @import("logger.zig");
 const security = @import("security.zig");
+const tls_mod = @import("tls.zig");
 
 pub const Server = struct {
     allocator: std.mem.Allocator,
@@ -14,6 +15,7 @@ pub const Server = struct {
     logger: *logger.Logger,
     active_connections: std.atomic.Value(u32),
     rate_limiter: security.RateLimiter,
+    tls_context: ?tls_mod.TlsContext,
 
     pub fn init(allocator: std.mem.Allocator, cfg: config.Config, log: *logger.Logger) !Server {
         // Rate limiter: max messages per hour per IP
@@ -23,6 +25,17 @@ pub const Server = struct {
             cfg.rate_limit_per_ip,
         );
 
+        // Initialize TLS context if enabled
+        var tls_ctx: ?tls_mod.TlsContext = null;
+        if (cfg.enable_tls) {
+            const tls_config = tls_mod.TlsConfig{
+                .enabled = true,
+                .cert_path = cfg.tls_cert_path,
+                .key_path = cfg.tls_key_path,
+            };
+            tls_ctx = try tls_mod.TlsContext.init(allocator, tls_config, log);
+        }
+
         return Server{
             .allocator = allocator,
             .config = cfg,
@@ -31,6 +44,7 @@ pub const Server = struct {
             .logger = log,
             .active_connections = std.atomic.Value(u32).init(0),
             .rate_limiter = rate_limiter,
+            .tls_context = tls_ctx,
         };
     }
 
@@ -40,6 +54,10 @@ pub const Server = struct {
             listener.deinit();
         }
         self.rate_limiter.deinit();
+        if (self.tls_context) |*ctx| {
+            var tls_ctx = ctx.*;
+            tls_ctx.deinit();
+        }
         self.logger.info("Server cleanup complete", .{});
     }
 
@@ -125,6 +143,12 @@ pub const Server = struct {
         defer ctx.connection.stream.close();
         defer _ = ctx.server.active_connections.fetchSub(1, .monotonic);
 
+        // Get pointer to TLS context if it exists
+        var tls_ctx_ptr: ?*tls_mod.TlsContext = null;
+        if (ctx.server.tls_context) |*tls_ctx| {
+            tls_ctx_ptr = tls_ctx;
+        }
+
         var session = protocol.Session.init(
             ctx.server.allocator,
             ctx.connection,
@@ -132,6 +156,7 @@ pub const Server = struct {
             ctx.server.logger,
             ctx.remote_addr,
             &ctx.server.rate_limiter,
+            tls_ctx_ptr,
         ) catch |err| {
             ctx.server.logger.err("Failed to initialize session from {s}: {}", .{ ctx.remote_addr, err });
             return;
