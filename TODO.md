@@ -2,6 +2,12 @@
 
 ## Recent Updates 📝
 
+### v0.14.0 (2025-10-23) - Comprehensive Testing Suite
+- ✅ **End-to-End Tests**: 11 complete workflow tests covering all SMTP operations
+- ✅ **Fuzzing Tests**: 15 security-focused fuzzing tests for robustness
+- ✅ **Test Infrastructure**: Separate test steps (unit, e2e, fuzz, all)
+- ✅ **Security Testing**: Injection attacks, malicious inputs, edge cases
+
 ### v0.13.0 (2025-10-23) - Multi-Platform Support
 - ✅ **Windows Support**: Full Windows compatibility with service management
 - ✅ **BSD Support**: FreeBSD and OpenBSD support with rc.d integration
@@ -603,8 +609,34 @@
     - [x] Virus and spam scanning integration testing
     - [x] Storage backend testing (Maildir, mbox, PostgreSQL, S3)
     - [x] Test helper functions for client simulation
-  - [ ] End-to-end tests
-  - [ ] Fuzzing tests
+  - [x] End-to-end tests
+    - [x] Basic SMTP conversation (greeting, EHLO, QUIT)
+    - [x] Send email without authentication
+    - [x] Send email with authentication
+    - [x] PIPELINING support testing
+    - [x] SIZE extension testing
+    - [x] Error handling for invalid commands
+    - [x] Multiple recipients handling
+    - [x] RSET command
+    - [x] VRFY command
+    - [x] NOOP command
+    - [x] Case insensitivity testing
+  - [x] Fuzzing tests
+    - [x] Random SMTP commands (100 iterations)
+    - [x] Random email addresses
+    - [x] Oversized inputs (1KB - 1MB)
+    - [x] Invalid UTF-8 sequences
+    - [x] CRLF injection attempts
+    - [x] Header injection attempts
+    - [x] Malformed MIME boundaries
+    - [x] Base64 decoding edge cases
+    - [x] Quoted-printable edge cases
+    - [x] Long lines without CRLF
+    - [x] Command parameter edge cases
+    - [x] NULL bytes in input
+    - [x] Extremely nested MIME parts (2-20 levels)
+    - [x] Random unicode in headers
+    - [x] Malicious attachment filenames
 - [x] CI/CD pipeline
   - [x] GitHub Actions workflow for CI
   - [x] Automated testing on push/PR

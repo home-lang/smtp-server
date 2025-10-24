@@ -145,6 +145,38 @@ pub fn build(b: *std.Build) void {
         test_step.dependOn(&run_unit_tests.step);
     }
 
+    // End-to-end tests
+    const e2e_step = b.step("test-e2e", "Run end-to-end tests");
+    const e2e_module = b.createModule(.{
+        .root_source_file = b.path("tests/e2e_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const e2e_tests = b.addTest(.{
+        .root_module = e2e_module,
+    });
+    const run_e2e_tests = b.addRunArtifact(e2e_tests);
+    e2e_step.dependOn(&run_e2e_tests.step);
+
+    // Fuzzing tests
+    const fuzz_step = b.step("test-fuzz", "Run fuzzing tests");
+    const fuzz_module = b.createModule(.{
+        .root_source_file = b.path("tests/fuzz_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const fuzz_tests = b.addTest(.{
+        .root_module = fuzz_module,
+    });
+    const run_fuzz_tests = b.addRunArtifact(fuzz_tests);
+    fuzz_step.dependOn(&run_fuzz_tests.step);
+
+    // All tests step
+    const test_all_step = b.step("test-all", "Run all tests (unit + e2e + fuzz)");
+    test_all_step.dependOn(test_step);
+    test_all_step.dependOn(e2e_step);
+    test_all_step.dependOn(fuzz_step);
+
     // Cross-platform build step
     const cross_step = b.step("cross", "Build for all supported platforms");
     if (build_all_targets) {
