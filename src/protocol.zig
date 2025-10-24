@@ -7,6 +7,7 @@ const security = @import("security.zig");
 const webhook = @import("webhook.zig");
 const greylist_mod = @import("greylist.zig");
 const tls_mod = @import("tls.zig");
+const chunking = @import("chunking.zig");
 
 const SMTPCommand = enum {
     HELO,
@@ -14,6 +15,7 @@ const SMTPCommand = enum {
     MAIL,
     RCPT,
     DATA,
+    BDAT,
     RSET,
     NOOP,
     QUIT,
@@ -95,6 +97,9 @@ pub const Session = struct {
     // Store the actual reader/writer structures info for proper cleanup
     tls_reader_info: ?struct { ptr: *anyopaque, size: usize },
     tls_writer_info: ?struct { ptr: *anyopaque, size: usize },
+    // BDAT/CHUNKING support
+    bdat_session: ?chunking.BDATSession,
+    chunking_handler: chunking.ChunkingHandler,
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -134,6 +139,8 @@ pub const Session = struct {
             .tls_output_buf = null,
             .tls_reader_info = null,
             .tls_writer_info = null,
+            .bdat_session = null,
+            .chunking_handler = chunking.ChunkingHandler.init(allocator, 10 * 1024 * 1024, cfg.max_message_size),
         };
     }
 
@@ -164,6 +171,11 @@ pub const Session = struct {
         }
         if (self.tls_output_buf) |buf| {
             self.allocator.free(buf);
+        }
+        // Clean up BDAT session
+        if (self.bdat_session) |*session| {
+            var s = session.*;
+            s.deinit();
         }
     }
 
@@ -234,6 +246,7 @@ pub const Session = struct {
             .MAIL => try self.handleMail(writer, line),
             .RCPT => try self.handleRcpt(writer, line),
             .DATA => try self.handleData(writer),
+            .BDAT => try self.handleBDAT(writer, line),
             .RSET => try self.handleRset(writer),
             .NOOP => try self.sendResponse(writer, 250, "OK", null),
             .QUIT => {
@@ -261,6 +274,7 @@ pub const Session = struct {
         if (std.ascii.eqlIgnoreCase(cmd_str, "MAIL")) return .MAIL;
         if (std.ascii.eqlIgnoreCase(cmd_str, "RCPT")) return .RCPT;
         if (std.ascii.eqlIgnoreCase(cmd_str, "DATA")) return .DATA;
+        if (std.ascii.eqlIgnoreCase(cmd_str, "BDAT")) return .BDAT;
         if (std.ascii.eqlIgnoreCase(cmd_str, "RSET")) return .RSET;
         if (std.ascii.eqlIgnoreCase(cmd_str, "NOOP")) return .NOOP;
         if (std.ascii.eqlIgnoreCase(cmd_str, "QUIT")) return .QUIT;
@@ -312,6 +326,7 @@ pub const Session = struct {
         _ = try self.conn_wrapper.write("250-8BITMIME\r\n");
         _ = try self.conn_wrapper.write("250-PIPELINING\r\n");
         _ = try self.conn_wrapper.write("250-SMTPUTF8\r\n");
+        _ = try self.conn_wrapper.write("250-CHUNKING\r\n");
 
         if (self.config.enable_auth) {
             _ = try self.conn_wrapper.write("250-AUTH PLAIN LOGIN\r\n");
@@ -540,6 +555,121 @@ pub const Session = struct {
         try self.handleRset(writer);
     }
 
+    fn handleBDAT(self: *Session, writer: anytype, line: []const u8) !void {
+        if (self.state != .RcptTo and self.state != .Data) {
+            try self.sendResponse(writer, 503, "Bad sequence of commands", null);
+            return;
+        }
+
+        // Initialize BDAT session if not already started
+        if (self.bdat_session == null) {
+            self.bdat_session = chunking.BDATSession.init(self.allocator);
+            self.state = .Data;
+        }
+
+        // Check rate limit before accepting chunk
+        const allowed = self.rate_limiter.checkAndIncrement(self.remote_addr) catch {
+            try self.sendResponse(writer, 451, "Internal error checking rate limit", null);
+            return;
+        };
+
+        if (!allowed) {
+            self.logger.logSecurityEvent(self.remote_addr, "Rate limit exceeded");
+            try self.sendResponse(writer, 450, "Rate limit exceeded, try again later", null);
+            return;
+        }
+
+        // Process BDAT command
+        const result = self.chunking_handler.handleBDAT(line, &self.conn_wrapper) catch |err| {
+            try self.sendResponse(writer, 500, "BDAT command failed", null);
+            self.logger.err("BDAT error: {}", .{err});
+            if (self.bdat_session) |*session| {
+                var s = session.*;
+                s.deinit();
+                self.bdat_session = null;
+            }
+            return;
+        };
+
+        // Add chunk to session
+        if (self.bdat_session) |*session| {
+            session.addChunk(result.chunk_data, result.is_last) catch |err| {
+                try self.sendResponse(writer, 552, "Message size exceeds maximum allowed", null);
+                self.logger.err("BDAT session error: {}", .{err});
+                var s = session.*;
+                s.deinit();
+                self.bdat_session = null;
+                self.chunking_handler.freeChunk(result.chunk_data);
+                return;
+            };
+        }
+
+        // If this is the last chunk, process the complete message
+        if (result.is_last) {
+            if (self.bdat_session) |*session| {
+                const message = session.getMessage() catch |err| {
+                    try self.sendResponse(writer, 554, "Transaction failed", null);
+                    self.logger.err("Failed to get message: {}", .{err});
+                    var s = session.*;
+                    s.deinit();
+                    self.bdat_session = null;
+                    return;
+                };
+                defer self.allocator.free(message);
+
+                // Save the message
+                self.saveMessage(message) catch |err| {
+                    try self.sendResponse(writer, 554, "Transaction failed", null);
+                    self.logger.err("Failed to save message: {}", .{err});
+                    var s = session.*;
+                    s.deinit();
+                    self.bdat_session = null;
+                    return;
+                };
+
+                self.logger.logMessageReceived(
+                    self.mail_from orelse "unknown",
+                    self.rcpt_to.items.len,
+                    message.len,
+                );
+
+                // Send webhook notification if configured
+                if (self.config.webhook_enabled) {
+                    const webhook_cfg = webhook.WebhookConfig{
+                        .url = self.config.webhook_url,
+                        .enabled = self.config.webhook_enabled,
+                        .timeout_ms = 5000,
+                    };
+
+                    const payload = webhook.WebhookPayload{
+                        .from = self.mail_from orelse "unknown",
+                        .recipients = self.rcpt_to.items,
+                        .size = message.len,
+                        .timestamp = std.time.timestamp(),
+                        .remote_addr = self.remote_addr,
+                    };
+
+                    webhook.sendWebhook(self.allocator, webhook_cfg, payload, self.logger) catch |err| {
+                        self.logger.warn("Webhook delivery failed: {}", .{err});
+                    };
+                }
+
+                try self.sendResponse(writer, 250, "OK: Message accepted for delivery", null);
+
+                // Clean up BDAT session
+                var s = session.*;
+                s.deinit();
+                self.bdat_session = null;
+
+                // Reset state for next message
+                try self.handleRset(writer);
+            }
+        } else {
+            // More chunks expected
+            try self.sendResponse(writer, 250, "OK: Chunk accepted", null);
+        }
+    }
+
     fn handleRset(self: *Session, writer: anytype) !void {
         if (self.mail_from) |mf| {
             self.allocator.free(mf);
@@ -550,6 +680,13 @@ pub const Session = struct {
             self.allocator.free(rcpt);
         }
         self.rcpt_to.clearRetainingCapacity();
+
+        // Reset BDAT session if active
+        if (self.bdat_session) |*session| {
+            var s = session.*;
+            s.deinit();
+            self.bdat_session = null;
+        }
 
         if (self.state == .Authenticated) {
             self.state = .Authenticated;

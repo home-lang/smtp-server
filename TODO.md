@@ -2,6 +2,13 @@
 
 ## Recent Updates 📝
 
+### v0.7.0 (2025-10-23) - Enhanced Email Features
+- ✅ **HTML Email**: Text/HTML conversion, sanitization, multipart alternative
+- ✅ **Storage Formats**: Maildir + mbox (RFC 4155) support
+- ✅ **CHUNKING Extension**: Binary message transmission (RFC 3030)
+- ✅ **Auto-responder**: Vacation/OOO responses with rate limiting (RFC 3834)
+- ✅ **Content Filtering**: Advanced rule-based message filtering engine
+
 ### v0.6.0 (2025-10-23) - Production-Ready Email Server
 - ✅ **Spam Prevention**: DNSBL/RBL checking + greylisting (triplet-based)
 - ✅ **Email Authentication**: SPF (RFC 7208), DKIM (RFC 6376), DMARC (RFC 7489)
@@ -232,7 +239,13 @@
   - [x] Multipart message parsing
   - [x] MIME part extraction with headers
   - [x] Comprehensive test coverage
-- [ ] HTML email support
+- [x] HTML email support
+  - [x] Text to HTML conversion
+  - [x] HTML to plain text stripping
+  - [x] HTML sanitization (remove dangerous tags)
+  - [x] Multipart alternative creation (plain + HTML)
+  - [x] HTML entity encoding/decoding
+  - [x] HTML structure validation
 - [x] Attachment handling
   - [x] Attachment extraction from MIME parts
   - [x] Base64 decoding
@@ -245,7 +258,13 @@
   - [x] Size validation against max_message_size
   - [x] Dynamic SIZE advertisement in EHLO
   - [x] RFC 1870 compliance
-- [ ] Implement CHUNKING extension (RFC 3030)
+- [x] Implement CHUNKING extension (RFC 3030)
+  - [x] BDAT command support
+  - [x] Chunk accumulation and validation
+  - [x] Binary message transmission
+  - [x] Session state management for chunked data
+  - [x] CHUNKING advertisement in EHLO
+  - [x] Integration with protocol handler
 - [x] Add SMTPUTF8 support (RFC 6531)
   - [x] SMTPUTF8 extension advertisement in EHLO
   - [x] UTF-8 email address validation
@@ -256,7 +275,12 @@
 ### Storage & Delivery
 - [ ] Pluggable storage backends
   - [x] Maildir (current)
-  - [ ] mbox format
+  - [x] mbox format (RFC 4155)
+    - [x] Message appending with "From " separators
+    - [x] Message reading and parsing
+    - [x] Message deletion with file rewrite
+    - [x] "From " line escaping/unescaping
+    - [x] Thread-safe operations
   - [ ] Database storage
   - [ ] S3/object storage
 - [x] Message queue for outbound delivery
@@ -348,12 +372,23 @@
   - [x] Case-sensitive/insensitive matching
   - [x] Priority-based rule processing
   - [x] Rule enable/disable functionality
-- [ ] Auto-responder support
+- [x] Auto-responder support
+  - [x] Rule-based auto-response configuration
+  - [x] Vacation/out-of-office responses
+  - [x] Date range support
+  - [x] Response rate limiting (prevent loops)
+  - [x] Auto-response tracking per sender
+  - [x] RFC 3834 compliance (Auto-Submitted header)
+  - [x] Skip automated senders (noreply@, mailer-daemon@, etc.)
 - [ ] Mailing list functionality
-- [ ] Vacation/out-of-office responses
 - [ ] Virus scanning integration (ClamAV)
 - [ ] Spam filter integration (SpamAssassin)
-- [ ] Content filtering
+- [x] Content filtering
+  - [x] Filter engine with rule-based message processing
+  - [x] Multiple condition types (from, to, subject, header, body, size, attachments)
+  - [x] Filter actions (accept, reject, forward, discard, tag)
+  - [x] Priority-based rule evaluation
+  - [x] Thread-safe rule management
 - [ ] Attachment size limits per user
 - [ ] Quota management
 
