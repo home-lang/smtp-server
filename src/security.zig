@@ -5,10 +5,12 @@ pub const RateLimiter = struct {
     ip_counters: std.StringHashMap(RateCounter),
     window_seconds: u64,
     max_requests: u32,
+    mutex: std.Thread.Mutex,
 
     const RateCounter = struct {
         count: u32,
         window_start: i64,
+        last_request: i64,
     };
 
     pub fn init(allocator: std.mem.Allocator, window_seconds: u64, max_requests: u32) RateLimiter {
@@ -17,6 +19,7 @@ pub const RateLimiter = struct {
             .ip_counters = std.StringHashMap(RateCounter).init(allocator),
             .window_seconds = window_seconds,
             .max_requests = max_requests,
+            .mutex = std.Thread.Mutex{},
         };
     }
 
@@ -29,6 +32,9 @@ pub const RateLimiter = struct {
     }
 
     pub fn checkAndIncrement(self: *RateLimiter, ip: []const u8) !bool {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
         const now = std.time.timestamp();
 
         if (self.ip_counters.get(ip)) |counter| {
@@ -39,15 +45,18 @@ pub const RateLimiter = struct {
                 try self.ip_counters.put(ip, RateCounter{
                     .count = 1,
                     .window_start = now,
+                    .last_request = now,
                 });
                 return true;
             } else if (counter.count >= self.max_requests) {
-                return false; // Rate limit exceeded
+                // Rate limit exceeded
+                return false;
             } else {
                 // Increment counter
                 try self.ip_counters.put(ip, RateCounter{
                     .count = counter.count + 1,
                     .window_start = counter.window_start,
+                    .last_request = now,
                 });
                 return true;
             }
@@ -57,19 +66,45 @@ pub const RateLimiter = struct {
             try self.ip_counters.put(ip_copy, RateCounter{
                 .count = 1,
                 .window_start = now,
+                .last_request = now,
             });
             return true;
         }
     }
 
+    pub fn getRemainingRequests(self: *RateLimiter, ip: []const u8) u32 {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        const now = std.time.timestamp();
+
+        if (self.ip_counters.get(ip)) |counter| {
+            const elapsed = now - counter.window_start;
+
+            if (elapsed >= self.window_seconds) {
+                return self.max_requests;
+            } else if (counter.count >= self.max_requests) {
+                return 0;
+            } else {
+                return self.max_requests - counter.count;
+            }
+        }
+
+        return self.max_requests;
+    }
+
     pub fn cleanup(self: *RateLimiter) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
         const now = std.time.timestamp();
         var to_remove = std.ArrayList([]const u8){};
         defer to_remove.deinit(self.allocator);
 
         var it = self.ip_counters.iterator();
         while (it.next()) |entry| {
-            const elapsed = now - entry.value_ptr.window_start;
+            const elapsed = now - entry.value_ptr.last_request;
+            // Remove entries that haven't been accessed in 2x the window time
             if (elapsed >= self.window_seconds * 2) {
                 to_remove.append(self.allocator, entry.key_ptr.*) catch continue;
             }
@@ -79,6 +114,22 @@ pub const RateLimiter = struct {
             _ = self.ip_counters.remove(key);
             self.allocator.free(key);
         }
+    }
+
+    pub fn getStats(self: *RateLimiter) struct { tracked_ips: usize, total_requests: u64 } {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        var total: u64 = 0;
+        var it = self.ip_counters.valueIterator();
+        while (it.next()) |counter| {
+            total += counter.count;
+        }
+
+        return .{
+            .tracked_ips = self.ip_counters.count(),
+            .total_requests = total,
+        };
     }
 };
 

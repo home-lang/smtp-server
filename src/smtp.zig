@@ -3,29 +3,47 @@ const net = std.net;
 const config = @import("config.zig");
 const auth = @import("auth.zig");
 const protocol = @import("protocol.zig");
+const logger = @import("logger.zig");
+const security = @import("security.zig");
 
 pub const Server = struct {
     allocator: std.mem.Allocator,
     config: config.Config,
     listener: ?net.Server,
     running: bool,
+    logger: *logger.Logger,
+    active_connections: std.atomic.Value(u32),
+    rate_limiter: security.RateLimiter,
 
-    pub fn init(allocator: std.mem.Allocator, cfg: config.Config) !Server {
+    pub fn init(allocator: std.mem.Allocator, cfg: config.Config, log: *logger.Logger) !Server {
+        // Rate limiter: max messages per hour per IP
+        const rate_limiter = security.RateLimiter.init(
+            allocator,
+            3600, // 1 hour window
+            cfg.rate_limit_per_ip,
+        );
+
         return Server{
             .allocator = allocator,
             .config = cfg,
             .listener = null,
             .running = false,
+            .logger = log,
+            .active_connections = std.atomic.Value(u32).init(0),
+            .rate_limiter = rate_limiter,
         };
     }
 
     pub fn deinit(self: *Server) void {
+        self.running = false;
         if (self.listener) |*listener| {
             listener.deinit();
         }
+        self.rate_limiter.deinit();
+        self.logger.info("Server cleanup complete", .{});
     }
 
-    pub fn start(self: *Server) !void {
+    pub fn start(self: *Server, shutdown_flag: *std.atomic.Value(bool)) !void {
         const address = try net.Address.parseIp(self.config.host, self.config.port);
 
         self.listener = try address.listen(.{
@@ -34,28 +52,96 @@ pub const Server = struct {
 
         self.running = true;
 
-        std.debug.print("SMTP Server listening on {s}:{d}\n", .{ self.config.host, self.config.port });
+        self.logger.info("SMTP Server listening on {s}:{d}", .{ self.config.host, self.config.port });
 
-        while (self.running) {
-            const connection = try self.listener.?.accept();
+        while (self.running and !shutdown_flag.load(.acquire)) {
+            // Accept with timeout to allow checking shutdown flag
+            const connection = self.listener.?.accept() catch |err| {
+                if (err == error.OperationCancelled or err == error.WouldBlock) {
+                    std.Thread.sleep(100 * std.time.ns_per_ms);
+                    continue;
+                }
+                self.logger.err("Error accepting connection: {}", .{err});
+                continue;
+            };
+
+            // Check connection limits
+            const current_connections = self.active_connections.load(.monotonic);
+            if (current_connections >= self.config.max_connections) {
+                self.logger.warn("Max connections ({d}) reached, rejecting new connection", .{self.config.max_connections});
+                _ = connection.stream.write("421 Too many connections, try again later\r\n") catch {};
+                connection.stream.close();
+                continue;
+            }
+
+            _ = self.active_connections.fetchAdd(1, .monotonic);
+
+            // Get remote address for logging
+            const remote_addr = connection.address;
+            var addr_buf: [64]u8 = undefined;
+            const addr_str = std.fmt.bufPrint(&addr_buf, "{any}", .{remote_addr}) catch "unknown";
+
+            self.logger.logConnection(addr_str, "connected");
 
             // Handle connection in a new thread for concurrent processing
-            const thread = try std.Thread.spawn(.{}, handleConnection, .{ self, connection });
+            const ctx = ConnectionContext{
+                .server = self,
+                .connection = connection,
+                .remote_addr = addr_str,
+            };
+
+            const thread = std.Thread.spawn(.{}, handleConnection, .{ctx}) catch |err| {
+                self.logger.err("Failed to spawn connection handler: {}", .{err});
+                _ = self.active_connections.fetchSub(1, .monotonic);
+                connection.stream.close();
+                continue;
+            };
             thread.detach();
+        }
+
+        self.logger.info("Server shutting down gracefully...", .{});
+
+        // Wait for active connections to finish (with timeout)
+        var wait_count: u32 = 0;
+        while (self.active_connections.load(.monotonic) > 0 and wait_count < 100) : (wait_count += 1) {
+            std.Thread.sleep(100 * std.time.ns_per_ms);
+        }
+
+        const remaining = self.active_connections.load(.monotonic);
+        if (remaining > 0) {
+            self.logger.warn("Shutdown timeout: {d} connections still active", .{remaining});
+        } else {
+            self.logger.info("All connections closed gracefully", .{});
         }
     }
 
-    fn handleConnection(self: *Server, connection: net.Server.Connection) void {
-        defer connection.stream.close();
+    const ConnectionContext = struct {
+        server: *Server,
+        connection: net.Server.Connection,
+        remote_addr: []const u8,
+    };
 
-        var session = protocol.Session.init(self.allocator, connection, self.config) catch |err| {
-            std.debug.print("Failed to initialize session: {}\n", .{err});
+    fn handleConnection(ctx: ConnectionContext) void {
+        defer ctx.connection.stream.close();
+        defer _ = ctx.server.active_connections.fetchSub(1, .monotonic);
+
+        var session = protocol.Session.init(
+            ctx.server.allocator,
+            ctx.connection,
+            ctx.server.config,
+            ctx.server.logger,
+            ctx.remote_addr,
+            &ctx.server.rate_limiter,
+        ) catch |err| {
+            ctx.server.logger.err("Failed to initialize session from {s}: {}", .{ ctx.remote_addr, err });
             return;
         };
         defer session.deinit();
 
         session.handle() catch |err| {
-            std.debug.print("Session error: {}\n", .{err});
+            ctx.server.logger.err("Session error from {s}: {}", .{ ctx.remote_addr, err });
         };
+
+        ctx.server.logger.logConnection(ctx.remote_addr, "disconnected");
     }
 };

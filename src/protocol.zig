@@ -2,6 +2,8 @@ const std = @import("std");
 const net = std.net;
 const config = @import("config.zig");
 const auth = @import("auth.zig");
+const logger = @import("logger.zig");
+const security = @import("security.zig");
 
 const SMTPCommand = enum {
     HELO,
@@ -35,8 +37,18 @@ pub const Session = struct {
     rcpt_to: std.ArrayList([]u8),
     authenticated: bool,
     client_hostname: ?[]u8,
+    logger: *logger.Logger,
+    remote_addr: []const u8,
+    rate_limiter: *security.RateLimiter,
 
-    pub fn init(allocator: std.mem.Allocator, connection: net.Server.Connection, cfg: config.Config) !Session {
+    pub fn init(
+        allocator: std.mem.Allocator,
+        connection: net.Server.Connection,
+        cfg: config.Config,
+        log: *logger.Logger,
+        remote_addr: []const u8,
+        rate_limiter: *security.RateLimiter,
+    ) !Session {
         return Session{
             .allocator = allocator,
             .connection = connection,
@@ -46,6 +58,9 @@ pub const Session = struct {
             .rcpt_to = std.ArrayList([]u8){},
             .authenticated = false,
             .client_hostname = null,
+            .logger = log,
+            .remote_addr = remote_addr,
+            .rate_limiter = rate_limiter,
         };
     }
 
@@ -229,6 +244,13 @@ pub const Session = struct {
             return;
         }
 
+        // Check max recipients limit
+        if (self.rcpt_to.items.len >= self.config.max_recipients) {
+            self.logger.logSecurityEvent(self.remote_addr, "Max recipients limit exceeded");
+            try self.sendResponse(writer, 452, "Too many recipients", null);
+            return;
+        }
+
         // Parse RCPT TO:<address>
         const to_start = std.mem.indexOf(u8, line, "TO:") orelse {
             try self.sendResponse(writer, 501, "Syntax: RCPT TO:<address>", null);
@@ -252,6 +274,18 @@ pub const Session = struct {
     fn handleData(self: *Session, writer: anytype) !void {
         if (self.state != .RcptTo) {
             try self.sendResponse(writer, 503, "Bad sequence of commands", null);
+            return;
+        }
+
+        // Check rate limit before accepting message
+        const allowed = self.rate_limiter.checkAndIncrement(self.remote_addr) catch {
+            try self.sendResponse(writer, 451, "Internal error checking rate limit", null);
+            return;
+        };
+
+        if (!allowed) {
+            self.logger.logSecurityEvent(self.remote_addr, "Rate limit exceeded");
+            try self.sendResponse(writer, 450, "Rate limit exceeded, try again later", null);
             return;
         }
 
@@ -309,6 +343,12 @@ pub const Session = struct {
 
         // Save the message (in a real implementation, you'd save to disk or database)
         try self.saveMessage(message_data.items);
+
+        self.logger.logMessageReceived(
+            self.mail_from orelse "unknown",
+            self.rcpt_to.items.len,
+            message_data.items.len,
+        );
 
         try self.sendResponse(writer, 250, "OK: Message accepted for delivery", null);
 
@@ -428,6 +468,6 @@ pub const Session = struct {
         // Write message body
         _ = try file.write(data);
 
-        std.debug.print("Message saved to {s}\n", .{filename});
+        self.logger.debug("Message saved to {s}", .{filename});
     }
 };

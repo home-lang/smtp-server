@@ -14,14 +14,58 @@
 - [x] Email address validation
 - [x] Maildir-style message storage
 - [x] Create README with setup and usage instructions
+- [x] Add comprehensive logging system
+  - [x] Structured logging with log levels (DEBUG, INFO, WARN, ERROR, CRITICAL)
+  - [x] File-based logging with timestamps
+  - [x] Colored console output
+  - [x] SMTP-specific logging methods
+  - [x] Thread-safe logging with mutex
+- [x] Add proper error handling throughout
+  - [x] Custom SMTP error types
+  - [x] Error information system with codes and messages
+  - [x] Proper error propagation
+- [x] Implement graceful shutdown
+  - [x] Signal handlers for SIGINT and SIGTERM
+  - [x] Wait for active connections to complete
+  - [x] Atomic shutdown flag
+  - [x] Connection tracking
+- [x] Implement connection limits per IP
+  - [x] Max connections enforcement
+  - [x] Active connection counter
+  - [x] Proper rejection with SMTP error
+
+- [x] Add command-line argument parsing
+  - [x] Help and version flags
+  - [x] Config file path option
+  - [x] Log level override
+  - [x] Port and host override
+  - [x] Max connections override
+  - [x] TLS and auth toggles
+- [x] Environment variable configuration support
+  - [x] SMTP_HOST, SMTP_PORT
+  - [x] SMTP_HOSTNAME
+  - [x] SMTP_MAX_CONNECTIONS
+  - [x] SMTP_MAX_MESSAGE_SIZE
+  - [x] SMTP_MAX_RECIPIENTS
+  - [x] SMTP_ENABLE_TLS, SMTP_ENABLE_AUTH
+  - [x] SMTP_TLS_CERT, SMTP_TLS_KEY
+- [x] Per-IP rate limiting with time windows
+  - [x] Sliding window implementation
+  - [x] Thread-safe with mutex
+  - [x] Automatic cleanup of old entries
+  - [x] Rate limit statistics
+  - [x] Integration with DATA command
+- [x] Maximum recipients per message limit
+  - [x] Configurable limit
+  - [x] Security event logging
 
 ## In Progress 🚧
 
-- [ ] Add comprehensive logging system
-  - [ ] Structured logging with log levels
-  - [ ] Log rotation support
-  - [ ] Performance metrics logging
-  - [ ] Security event logging
+- [ ] Create comprehensive test suite
+  - [ ] Test script for SMTP commands
+  - [ ] Rate limiting tests
+  - [ ] Max recipients tests
+  - [ ] Connection limit tests
 
 ## High Priority 🔴
 
@@ -38,24 +82,14 @@
 - [ ] Add SASL authentication mechanisms
   - [ ] CRAM-MD5
   - [ ] DIGEST-MD5
-- [ ] Implement connection limits per IP
 - [ ] Add DNSBL/RBL checking for spam prevention
 - [ ] Implement greylisting
 
 ### Core Functionality
-- [ ] Add proper error handling throughout
-  - [ ] Custom error types
-  - [ ] Error recovery strategies
-  - [ ] Graceful degradation
-- [ ] Implement graceful shutdown
-  - [ ] Handle SIGTERM/SIGINT
-  - [ ] Complete ongoing transactions
-  - [ ] Close connections cleanly
-- [ ] Add command-line argument parsing
-  - [ ] Custom config file path
-  - [ ] Override config values
-  - [ ] Debug mode flag
 - [ ] Environment variable configuration support
+- [ ] Per-IP rate limiting with time windows
+- [ ] Connection timeout enforcement
+- [ ] Maximum recipients per message limit
 
 ## Medium Priority 🟡
 
