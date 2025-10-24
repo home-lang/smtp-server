@@ -2,6 +2,12 @@
 
 ## Recent Updates 📝
 
+### v0.16.0 (2025-10-24) - Complete Documentation Suite
+- ✅ **Architecture Documentation**: Comprehensive system architecture with diagrams
+- ✅ **Deployment Guides**: Complete deployment instructions for all platforms
+- ✅ **Troubleshooting Guide**: Extensive troubleshooting for all common issues
+- ✅ **Performance Tuning Guide**: Detailed performance optimization guide
+
 ### v0.15.0 (2025-10-23) - GDPR Compliance & Documentation
 - ✅ **GDPR Data Export**: Complete user data export in JSON format (Article 15 & 20)
 - ✅ **GDPR Data Deletion**: Permanent, secure data erasure (Article 17)
@@ -698,10 +704,60 @@
     - [x] Error codes (HTTP, SMTP)
     - [x] Rate limiting
     - [x] WebHooks
-  - [ ] Architecture diagrams
-  - [ ] Deployment guides
-  - [ ] Troubleshooting guide
-  - [ ] Performance tuning guide
+  - [x] Architecture diagrams
+    - [x] System overview diagram
+    - [x] Component architecture
+    - [x] Data flow diagrams (incoming/outgoing)
+    - [x] Storage architecture with database schemas
+    - [x] Security architecture (defense in depth)
+    - [x] Deployment architectures (single, HA, K8s)
+    - [x] Scalability design
+    - [x] Monitoring & observability
+    - [x] Disaster recovery procedures
+  - [x] Deployment guides
+    - [x] Prerequisites and system requirements
+    - [x] Single server deployment
+    - [x] Docker deployment with Compose
+    - [x] Kubernetes deployment with manifests
+    - [x] Cloud platform deployments (AWS, GCP, Azure)
+    - [x] High availability setup (HAProxy, Keepalived)
+    - [x] TLS/SSL configuration (Let's Encrypt)
+    - [x] Database setup (SQLite, PostgreSQL)
+    - [x] Monitoring setup (Prometheus, Grafana)
+    - [x] Backup and recovery procedures
+    - [x] Security hardening guidelines
+    - [x] Performance tuning recommendations
+  - [x] Troubleshooting guide
+    - [x] General troubleshooting steps
+    - [x] Service startup issues
+    - [x] Connection problems
+    - [x] Authentication issues
+    - [x] Email delivery problems
+    - [x] TLS/SSL troubleshooting
+    - [x] Performance diagnostics
+    - [x] Database issues
+    - [x] Storage problems
+    - [x] Queue issues
+    - [x] Memory and resource issues
+    - [x] Docker/Kubernetes issues
+    - [x] Security and firewall
+    - [x] Advanced diagnostics
+  - [x] Performance tuning guide
+    - [x] Performance metrics and KPIs
+    - [x] Baseline performance targets
+    - [x] System-level tuning (kernel, limits)
+    - [x] Application-level tuning
+    - [x] Database optimization (SQLite, PostgreSQL)
+    - [x] Storage optimization
+    - [x] Network tuning
+    - [x] Memory optimization
+    - [x] CPU optimization
+    - [x] I/O optimization
+    - [x] Caching strategies
+    - [x] Load balancing
+    - [x] Monitoring and profiling
+    - [x] Benchmarking tools
+    - [x] Workload-specific tuning
 
 ### Multi-Platform Support
 - [x] Windows support
