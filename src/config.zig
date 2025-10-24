@@ -18,6 +18,8 @@ pub const Config = struct {
     greeting_timeout_seconds: u32,  // Timeout for initial greeting
 
     rate_limit_per_ip: u32,
+    rate_limit_per_user: u32,
+    rate_limit_cleanup_interval: u64,
     max_recipients: usize,
     hostname: []const u8,
     webhook_url: ?[]const u8,
@@ -61,6 +63,8 @@ fn loadDefaults(allocator: std.mem.Allocator) !Config {
         .command_timeout_seconds = 300, // 5 minutes between commands
         .greeting_timeout_seconds = 30, // 30 seconds for initial greeting
         .rate_limit_per_ip = 100, // messages per hour
+        .rate_limit_per_user = 200, // messages per hour per authenticated user
+        .rate_limit_cleanup_interval = 3600, // cleanup every hour
         .max_recipients = 100,
         .hostname = try allocator.dupe(u8, "localhost"),
         .webhook_url = null,
@@ -165,6 +169,21 @@ fn applyEnvironmentVariables(allocator: std.mem.Allocator, cfg: *Config) !void {
     // SMTP_WEBHOOK_ENABLED
     if (std.posix.getenv("SMTP_WEBHOOK_ENABLED")) |value| {
         cfg.webhook_enabled = std.ascii.eqlIgnoreCase(value, "true") or std.ascii.eqlIgnoreCase(value, "1");
+    }
+
+    // SMTP_RATE_LIMIT_PER_IP
+    if (std.posix.getenv("SMTP_RATE_LIMIT_PER_IP")) |value| {
+        cfg.rate_limit_per_ip = std.fmt.parseInt(u32, value, 10) catch cfg.rate_limit_per_ip;
+    }
+
+    // SMTP_RATE_LIMIT_PER_USER
+    if (std.posix.getenv("SMTP_RATE_LIMIT_PER_USER")) |value| {
+        cfg.rate_limit_per_user = std.fmt.parseInt(u32, value, 10) catch cfg.rate_limit_per_user;
+    }
+
+    // SMTP_RATE_LIMIT_CLEANUP_INTERVAL
+    if (std.posix.getenv("SMTP_RATE_LIMIT_CLEANUP_INTERVAL")) |value| {
+        cfg.rate_limit_cleanup_interval = std.fmt.parseInt(u64, value, 10) catch cfg.rate_limit_cleanup_interval;
     }
 }
 

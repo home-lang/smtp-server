@@ -148,6 +148,81 @@ try rate_limiter.startAutomaticCleanup();
 
 ---
 
+### Per-User Rate Limiting (Fixed in v0.22.0)
+
+**Problem:** Rate limiting was only by IP address, not by authenticated user. This prevented better control for authenticated submissions and could block legitimate users sharing the same IP.
+
+**Solution:** Implemented per-user rate limiting alongside IP-based limiting:
+- Added `user_counters: std.StringHashMap(RateCounter)` to RateLimiter
+- New `checkAndIncrementUser()` method for authenticated user rate limiting
+- New `getRemainingRequestsUser()` method to check user limits
+- Configurable `max_requests_per_user` field (default: 200/hour)
+- Cleanup logic handles both IP and user counters
+- Environment variable support: `SMTP_RATE_LIMIT_PER_USER`
+
+**Usage:**
+```zig
+// Check rate limit for authenticated user
+if (authenticated_user) |user| {
+    if (!try rate_limiter.checkAndIncrementUser(user)) {
+        // User rate limit exceeded
+        try self.sendResponse(writer, 451, "Rate limit exceeded for user", null);
+        return;
+    }
+}
+```
+
+**Configuration:**
+```bash
+# Environment variables
+SMTP_RATE_LIMIT_PER_IP=100          # 100 messages/hour per IP
+SMTP_RATE_LIMIT_PER_USER=200        # 200 messages/hour per user
+SMTP_RATE_LIMIT_CLEANUP_INTERVAL=3600  # Cleanup every 1 hour
+```
+
+**Files Changed:**
+- `src/security.zig` - Added per-user rate limiting methods
+- `src/config.zig` - Added configuration fields and environment variables
+- `src/smtp.zig` - Updated RateLimiter initialization
+
+**Benefits:**
+- Better control for authenticated submissions
+- Prevents legitimate users from being blocked by shared IP
+- Complements IP-based rate limiting
+- Configurable per-deployment needs
+
+---
+
+### Configurable Cleanup Interval (Fixed in v0.22.0)
+
+**Problem:** Rate limiter cleanup interval was hardcoded to 1 hour, not allowing customization for different deployment scenarios.
+
+**Solution:** Made cleanup interval configurable:
+- Added `cleanup_interval_seconds: u64` field to RateLimiter
+- Updated `cleanupWorker()` to use configurable interval
+- Environment variable support: `SMTP_RATE_LIMIT_CLEANUP_INTERVAL`
+- Default remains 3600 seconds (1 hour)
+
+**Configuration:**
+```bash
+# Cleanup every 30 minutes for high-traffic deployments
+SMTP_RATE_LIMIT_CLEANUP_INTERVAL=1800
+
+# Cleanup every 2 hours for low-traffic deployments
+SMTP_RATE_LIMIT_CLEANUP_INTERVAL=7200
+```
+
+**Files Changed:**
+- `src/security.zig` - Updated cleanup worker to use configurable interval
+- `src/config.zig` - Added configuration field and environment variable
+
+**Benefits:**
+- Customizable cleanup frequency based on traffic patterns
+- Better memory management for different deployment scenarios
+- Maintains backward compatibility with 1-hour default
+
+---
+
 ## 🔴 Critical Issues
 
 **None!** All critical issues have been resolved in v0.21.0.
@@ -200,6 +275,8 @@ pub const ServerStats = struct {
 
 ## 🟠 Medium Priority Issues
 
+**None!** All medium priority issues have been resolved in v0.22.0.
+
 ---
 
 ## 💡 Enhancement Opportunities
@@ -214,43 +291,6 @@ GREETING_TIMEOUT=30        # 30s to send greeting
 COMMAND_TIMEOUT=300        # 5m between commands
 DATA_TIMEOUT=600           # 10m for DATA phase
 IDLE_TIMEOUT=120           # 2m idle timeout
-```
-
-### Rate Limiter Per-User Instead of Per-IP
-
-**Current:** Rate limiting by IP address
-
-**Enhancement:** Rate limiting by authenticated user:
-```zig
-pub fn checkAndIncrementUser(
-    self: *RateLimiter,
-    user: []const u8,
-) !bool {
-    // Similar to checkAndIncrement but keyed by username
-}
-```
-
-**Benefits:**
-- Better control for authenticated submissions
-- Prevents legitimate users from being blocked by shared IP
-- Complements per-IP rate limiting
-
-### Configurable Cleanup Interval
-
-**Current:** Hardcoded 1-hour cleanup interval
-
-**Enhancement:**
-```zig
-pub fn startAutomaticCleanup(
-    self: *RateLimiter,
-    interval_seconds: u64,
-) !void {
-    // Use configurable interval instead of hardcoded
-}
-```
-
-```bash
-RATE_LIMITER_CLEANUP_INTERVAL=3600  # 1 hour
 ```
 
 ---
@@ -377,8 +417,8 @@ wait
 - [ ] Thread safety audit and fixes
 
 ### Short-term (v0.22.0)
-- [ ] Configurable timeout granularity
-- [ ] Per-user rate limiting
+- [x] Per-user rate limiting (v0.22.0)
+- [x] Configurable cleanup interval (v0.22.0)
 - [ ] Connection pooling
 
 ### Medium-term (v0.23.0)
@@ -408,4 +448,4 @@ If you encounter issues or have solutions:
 ---
 
 **Last Updated:** 2025-10-24
-**Version:** v0.21.0
+**Version:** v0.22.0

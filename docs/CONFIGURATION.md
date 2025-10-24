@@ -216,16 +216,42 @@ SMTP_GREETING_TIMEOUT_SECONDS=10
 ### Rate Limiting
 
 #### SMTP_RATE_LIMIT_PER_IP
-- **Description:** Maximum messages per hour per IP
+- **Description:** Maximum messages per hour per IP address
 - **Type:** Integer
 - **Default:** `100`
-- **Purpose:** Prevent spam and abuse
+- **Purpose:** Prevent spam and abuse from individual IPs
 - **Examples:**
   ```bash
   SMTP_RATE_LIMIT_PER_IP=100   # Default
   SMTP_RATE_LIMIT_PER_IP=50    # Strict
   SMTP_RATE_LIMIT_PER_IP=1000  # High volume
   ```
+
+#### SMTP_RATE_LIMIT_PER_USER
+- **Description:** Maximum messages per hour per authenticated user
+- **Type:** Integer
+- **Default:** `200`
+- **Purpose:** Separate rate limit for authenticated users (typically higher than IP limit)
+- **Examples:**
+  ```bash
+  SMTP_RATE_LIMIT_PER_USER=200   # Default
+  SMTP_RATE_LIMIT_PER_USER=100   # Strict
+  SMTP_RATE_LIMIT_PER_USER=5000  # High volume authenticated users
+  ```
+- **Note:** This applies only to authenticated SMTP submissions. Unauthenticated connections still use IP-based limiting.
+
+#### SMTP_RATE_LIMIT_CLEANUP_INTERVAL
+- **Description:** How often (in seconds) to clean up old rate limit entries
+- **Type:** Integer (seconds)
+- **Default:** `3600` (1 hour)
+- **Purpose:** Memory management for rate limiter hashmaps
+- **Examples:**
+  ```bash
+  SMTP_RATE_LIMIT_CLEANUP_INTERVAL=3600  # Default - 1 hour
+  SMTP_RATE_LIMIT_CLEANUP_INTERVAL=1800  # 30 minutes for high traffic
+  SMTP_RATE_LIMIT_CLEANUP_INTERVAL=7200  # 2 hours for low traffic
+  ```
+- **Recommendation:** For high-traffic servers, use shorter intervals (30-60 minutes). For low-traffic servers, longer intervals (2-4 hours) are fine.
 
 ---
 
@@ -398,6 +424,8 @@ SMTP_WEBHOOK_ENABLED=true
 
 # Rate Limiting
 SMTP_RATE_LIMIT_PER_IP=100
+SMTP_RATE_LIMIT_PER_USER=200
+SMTP_RATE_LIMIT_CLEANUP_INTERVAL=3600
 ```
 
 **Create `/etc/systemd/system/smtp-server.service`:**
@@ -477,6 +505,8 @@ SMTP_WEBHOOK_URL=https://api.example.com/webhook
 SMTP_MAX_MESSAGE_SIZE=52428800
 SMTP_MAX_RECIPIENTS=100
 SMTP_RATE_LIMIT_PER_IP=100
+SMTP_RATE_LIMIT_PER_USER=200
+SMTP_RATE_LIMIT_CLEANUP_INTERVAL=3600
 SMTP_TIMEOUT_SECONDS=300
 SMTP_DATA_TIMEOUT_SECONDS=600
 SMTP_COMMAND_TIMEOUT_SECONDS=300

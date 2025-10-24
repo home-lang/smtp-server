@@ -25,7 +25,7 @@ test "rate limiter - basic functionality" {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    var limiter = security.RateLimiter.init(allocator, 3600, 10); // 10 requests per hour
+    var limiter = security.RateLimiter.init(allocator, 3600, 10, 20, 3600); // 10 requests per hour per IP, 20 per user, 1 hour cleanup
     defer limiter.deinit();
 
     const ip = "192.168.1.1";
@@ -48,7 +48,7 @@ test "rate limiter - different IPs" {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    var limiter = security.RateLimiter.init(allocator, 3600, 5);
+    var limiter = security.RateLimiter.init(allocator, 3600, 5, 10, 3600);
     defer limiter.deinit();
 
     // Different IPs should have independent limits
@@ -66,7 +66,7 @@ test "rate limiter - remaining requests" {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    var limiter = security.RateLimiter.init(allocator, 3600, 10);
+    var limiter = security.RateLimiter.init(allocator, 3600, 10, 20, 3600);
     defer limiter.deinit();
 
     const ip = "192.168.1.1";

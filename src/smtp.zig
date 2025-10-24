@@ -32,11 +32,13 @@ pub const Server = struct {
         auth_backend: ?*auth.AuthBackend,
         greylist: ?*greylist_mod.Greylist,
     ) !Server {
-        // Rate limiter: max messages per hour per IP
+        // Rate limiter: max messages per hour per IP and per user
         const rate_limiter = security.RateLimiter.init(
             allocator,
             3600, // 1 hour window
             cfg.rate_limit_per_ip,
+            cfg.rate_limit_per_user,
+            cfg.rate_limit_cleanup_interval,
         );
 
         // Initialize TLS context if enabled
