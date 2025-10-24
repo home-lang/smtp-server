@@ -281,17 +281,7 @@ pub const ServerStats = struct {
 
 ## 💡 Enhancement Opportunities
 
-### Connection Timeout Granularity
-
-**Current:** Single connection timeout for entire session
-
-**Enhancement:** Different timeouts for different phases:
-```bash
-GREETING_TIMEOUT=30        # 30s to send greeting
-COMMAND_TIMEOUT=300        # 5m between commands
-DATA_TIMEOUT=600           # 10m for DATA phase
-IDLE_TIMEOUT=120           # 2m idle timeout
-```
+All identified medium-priority enhancements have been implemented! Remaining opportunities are for future consideration:
 
 ---
 

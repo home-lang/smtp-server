@@ -2,6 +2,14 @@
 
 ## Recent Updates 📝
 
+### v0.22.0 (2025-10-24) - Per-User Rate Limiting & Enhanced Configuration
+- ✅ **Per-User Rate Limiting**: Separate rate limits for authenticated users vs IP addresses
+- ✅ **Configurable Cleanup Interval**: Customizable rate limiter cleanup scheduling
+- ✅ **Enhanced Rate Limiter**: User counters, per-user methods, improved statistics
+- ✅ **Environment Variable Support**: Complete configuration for all rate limiting features
+- ✅ **Documentation Updates**: Comprehensive configuration and implementation guides
+- ✅ **All Medium Priority Issues Resolved**: Zero outstanding medium-priority items
+
 ### v0.21.0 (2025-10-24) - Thread Safety, TLS Fix, Performance & Documentation
 - ✅ **STARTTLS Memory Alignment Fix**: Fixed memory alignment bug in TLS handshake (CRITICAL FIX)
 - ✅ **Native STARTTLS Working**: TLS 1.3 handshake now completes successfully
@@ -253,15 +261,14 @@
   - [x] Message size limit tests
   - [x] Email validation tests
 
-### TLS Handshake Debugging
-- [ ] Debug TLS cipher/handshake errors
+### TLS Implementation
+- [x] Debug TLS cipher/handshake errors (✅ FIXED in v0.21.0)
   - [x] Heap-allocated I/O buffers implemented
   - [x] Session-scoped resource management
   - [x] CertKeyPair loading from absolute paths
-  - [ ] Investigate cipher panic during handshake
-  - [ ] Test with different TLS clients
-  - [ ] Add detailed TLS handshake logging
-  - [ ] Consider alternative I/O approach for STARTTLS
+  - [x] Fixed memory alignment bug in TLS cleanup (v0.21.0)
+  - [x] Native STARTTLS working with TLS 1.3 (v0.21.0)
+  - [x] Tested with openssl s_client successfully (v0.21.0)
 
 ## High Priority 🔴
 
@@ -932,22 +939,23 @@
 ## Known Issues 🐛
 
 ### Critical
-- [ ] TLS handshake cipher panic during STARTTLS
-  - Server sends "220 Ready to start TLS"
-  - Handshake initiates but fails with cipher decrypt error
-  - Root cause: Possible I/O buffer lifecycle or tls.zig library issue
-  - **Workaround**: Use reverse proxy (nginx/HAProxy) for production TLS
+**None!** All critical issues have been resolved.
+- [x] ~~TLS handshake cipher panic during STARTTLS~~ (Fixed in v0.21.0: memory alignment bug)
 
 ### High Priority
-- [ ] Need to verify thread safety of all shared resources
+**None!** All high priority issues have been resolved.
+- [x] ~~Need to verify thread safety of all shared resources~~ (Fixed in v0.21.0: comprehensive audit)
 - [x] ~~Authentication accepts any credentials (development mode)~~ (Fixed: now uses database with Argon2id)
 - [x] ~~Rate limiter cleanup not scheduled~~ (Fixed in v0.18.0: automatic background cleanup)
 
 ### Medium Priority
+**None!** All medium priority issues have been resolved.
 - [x] ~~No connection timeout enforcement yet~~ (Fixed in 0.2.0)
 - [x] ~~No maximum recipients per message limit~~ (Fixed in 0.1.0)
-- [ ] No DATA command timeout (partial - general timeout implemented)
+- [x] ~~No DATA command timeout~~ (Fixed in v0.21.0: configurable DATA timeout)
 - [x] ~~HTTPS webhooks not supported (HTTP only)~~ (Fixed in v0.20.0: full TLS client support)
+- [x] ~~Per-user rate limiting~~ (Fixed in v0.22.0: full per-user rate limiting)
+- [x] ~~Configurable cleanup interval~~ (Fixed in v0.22.0: customizable cleanup scheduling)
 
 ## Research Needed 🔬
 
@@ -962,8 +970,8 @@
 
 ## Project Information
 
-**Last Updated**: 2025-10-23 (current date)
-**Current Version**: v0.12.0
+**Last Updated**: 2025-10-24
+**Current Version**: v0.22.0
 **Zig Version**: 0.15.1
 **License**: MIT
 
