@@ -4,6 +4,66 @@ This document tracks known issues with the SMTP server and provides solutions or
 
 ## ✅ Resolved Issues
 
+### Database Thread Safety (Fixed in v0.21.0)
+
+**Problem:** Database struct had no mutex protection, allowing concurrent access from multiple threads leading to potential data corruption.
+
+**Solution:** Implemented thread-safe Database access with mutex protection:
+- Added `std.Thread.Mutex` to Database struct
+- Protected all database operations: exec(), prepare(), createUser(), getUserByUsername(), etc.
+- Used defer pattern for automatic mutex unlocking
+- No nested mutex acquisitions (prevents deadlocks)
+
+**Files Changed:**
+- `src/database.zig` - Added mutex field and protection to all methods
+- `docs/THREAD_SAFETY_AUDIT.md` - Comprehensive thread safety audit
+
+**Impact:**
+- 🔴 **CRITICAL**: Prevents database corruption
+- 🔴 **CRITICAL**: Prevents concurrent write conflicts
+- 🔴 **CRITICAL**: Prevents crashes on multi-threaded access
+
+**Thread Safety Summary:**
+- ✅ Database - mutex protected
+- ✅ RateLimiter - mutex protected
+- ✅ Logger - mutex protected
+- ✅ Config - read-only (no protection needed)
+
+---
+
+### DATA Command Timeout (Fixed in v0.21.0)
+
+**Problem:** No specific timeout for DATA phase, allowing slow clients to hold connections indefinitely during message transfer.
+
+**Solution:** Implemented configurable timeout enforcement for DATA command:
+- Added `data_timeout_seconds` configuration field (default: 600 seconds / 10 minutes)
+- Environment variable support: `SMTP_DATA_TIMEOUT_SECONDS`
+- Timer-based timeout checking in handleData() using std.time.milliTimestamp()
+- Returns 451 SMTP error code with descriptive message on timeout
+- Warning logs include client address and elapsed time
+
+**Usage:**
+```bash
+# Configure DATA timeout via environment variable
+SMTP_DATA_TIMEOUT_SECONDS=600  # 10 minutes (default)
+SMTP_DATA_TIMEOUT_SECONDS=1200 # 20 minutes (for large messages)
+
+# Start server with custom DATA timeout
+SMTP_DATA_TIMEOUT_SECONDS=300 ./zig-out/bin/smtp-server
+```
+
+**Files Changed:**
+- `src/config.zig` - Added data_timeout_seconds field and environment variable support
+- `src/protocol.zig` - Added timeout enforcement in handleData() function
+
+**Benefits:**
+- Prevents resource exhaustion from slow/stalled clients
+- Configurable per-deployment needs
+- Clear error messages for troubleshooting
+- Separate from general connection timeout for better control
+
+---
+
 ### HTTPS Webhooks Not Supported (Fixed in v0.20.0)
 
 **Problem:** Webhook implementation only supported HTTP URLs, not HTTPS, preventing secure webhook notifications.
@@ -68,18 +128,21 @@ try rate_limiter.startAutomaticCleanup();
 - Root cause: Possible I/O buffer lifecycle or zig-tls library issue
 
 **Workaround (Recommended for Production):**
-Use reverse proxy (nginx/HAProxy) for TLS termination:
+Use reverse proxy (nginx/HAProxy) for TLS termination.
 
-**nginx Configuration:**
+**📖 Complete setup guide:** [TLS_PROXY_SETUP.md](./TLS_PROXY_SETUP.md)
+
+**Quick nginx example:**
 ```nginx
 stream {
     upstream smtp_backend {
-        server 127.0.0.1:2525;  # SMTP server on non-standard port
+        server 127.0.0.1:2525;
     }
 
     server {
         listen 587 ssl;
         proxy_pass smtp_backend;
+        proxy_timeout 600s;
 
         ssl_certificate /etc/ssl/certs/mail.example.com.crt;
         ssl_certificate_key /etc/ssl/private/mail.example.com.key;
@@ -87,18 +150,6 @@ stream {
         ssl_ciphers HIGH:!aNULL:!MD5;
     }
 }
-```
-
-**HAProxy Configuration:**
-```
-frontend smtp_tls
-    bind *:587 ssl crt /etc/ssl/mail.example.com.pem
-    mode tcp
-    default_backend smtp_servers
-
-backend smtp_servers
-    mode tcp
-    server smtp1 127.0.0.1:2525
 ```
 
 **Long-term Solution:**
@@ -110,73 +161,6 @@ backend smtp_servers
 ---
 
 ## 🟡 High Priority Issues
-
-### DATA Command Timeout
-
-**Status:** Partial implementation
-
-**Problem:**
-- General connection timeout exists
-- No specific timeout for DATA phase
-- Slow clients can hold connections during message transfer
-
-**Current Workaround:**
-Use the existing connection timeout (`CONNECTION_TIMEOUT` environment variable).
-
-**Recommended Solution:**
-
-**Option 1: Poll-based timeout (Unix)**
-```zig
-const std = @import("std");
-const posix = std.posix;
-
-fn readWithTimeout(
-    fd: posix.socket_t,
-    buffer: []u8,
-    timeout_ms: i32,
-) !usize {
-    var pollfds = [_]posix.pollfd{.{
-        .fd = fd,
-        .events = posix.POLL.IN,
-        .revents = 0,
-    }};
-
-    const result = try posix.poll(&pollfds, timeout_ms);
-    if (result == 0) return error.Timeout;
-    if (pollfds[0].revents & posix.POLL.ERR != 0) return error.SocketError;
-
-    return try posix.read(fd, buffer);
-}
-```
-
-**Option 2: Total DATA phase timeout**
-```zig
-const start_time = std.time.milliTimestamp();
-const data_timeout_ms = 600000; // 10 minutes
-
-while (true) {
-    const elapsed = std.time.milliTimestamp() - start_time;
-    if (elapsed > data_timeout_ms) {
-        try self.sendResponse(writer, 451, "DATA timeout", null);
-        return error.DataTimeout;
-    }
-
-    // Continue reading...
-}
-```
-
-**Configuration:**
-```bash
-# Environment variables
-DATA_COMMAND_TIMEOUT=600  # 10 minutes for entire DATA phase
-DATA_LINE_TIMEOUT=30      # 30 seconds between lines
-```
-
-**Files to Modify:**
-- `src/protocol.zig` - Add timeout to handleData()
-- `src/config.zig` - Add DATA timeout configuration
-
----
 
 ### Thread Safety Verification Needed
 
@@ -383,25 +367,27 @@ wait
 
 ## 🎯 Priority Roadmap
 
-### Immediate (v0.18.0)
-- [x] Fix rate limiter cleanup scheduling
+### Immediate (v0.21.0)
+- [x] Fix rate limiter cleanup scheduling (v0.18.0)
+- [x] Add HTTPS webhook support (v0.20.0)
+- [x] Add DATA command timeout (v0.21.0)
 - [ ] Document TLS proxy workaround
-- [ ] Add DATA command timeout
-
-### Short-term (v0.19.0)
-- [ ] Add HTTPS webhook support
 - [ ] Thread safety audit and fixes
-- [ ] Configurable timeout granularity
 
-### Medium-term (v0.20.0)
-- [ ] Fix TLS handshake issue (if feasible)
-- [ ] Connection pooling
+### Short-term (v0.22.0)
+- [ ] Configurable timeout granularity
 - [ ] Per-user rate limiting
+- [ ] Connection pooling
+
+### Medium-term (v0.23.0)
+- [ ] Fix TLS handshake issue (if feasible)
+- [ ] OpenTelemetry traces
+- [ ] Advanced monitoring and alerting
 
 ### Long-term
 - [ ] Streaming large message handling
-- [ ] Advanced monitoring and alerting
 - [ ] Performance optimizations
+- [ ] Advanced load balancing
 
 ---
 
@@ -420,4 +406,4 @@ If you encounter issues or have solutions:
 ---
 
 **Last Updated:** 2025-10-24
-**Version:** v0.18.0
+**Version:** v0.21.0

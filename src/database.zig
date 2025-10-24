@@ -93,6 +93,7 @@ pub const User = struct {
 pub const Database = struct {
     db: ?*sqlite.sqlite3,
     allocator: std.mem.Allocator,
+    mutex: std.Thread.Mutex,
 
     pub fn init(allocator: std.mem.Allocator, db_path: []const u8) !Database {
         var db: ?*sqlite.sqlite3 = null;
@@ -112,7 +113,11 @@ pub const Database = struct {
         var database = Database{
             .db = db,
             .allocator = allocator,
+            .mutex = std.Thread.Mutex{},
         };
+
+        // Enable WAL mode for better concurrent read performance
+        try database.enableWALMode();
 
         // Initialize schema
         try database.initSchema();
@@ -124,6 +129,23 @@ pub const Database = struct {
         if (self.db) |db| {
             _ = sqlite.sqlite3_close(db);
         }
+    }
+
+    /// Enable Write-Ahead Logging (WAL) mode for better concurrent read performance
+    /// WAL allows readers to access the database while a write is in progress
+    fn enableWALMode(self: *Database) !void {
+        // Enable WAL mode
+        const wal_pragma = "PRAGMA journal_mode=WAL;";
+        try self.exec(wal_pragma);
+
+        // Set synchronous mode to NORMAL for better performance with WAL
+        // NORMAL is safe with WAL mode and provides good durability guarantees
+        const sync_pragma = "PRAGMA synchronous=NORMAL;";
+        try self.exec(sync_pragma);
+
+        // Set a reasonable busy timeout (5 seconds)
+        const timeout_pragma = "PRAGMA busy_timeout=5000;";
+        try self.exec(timeout_pragma);
     }
 
     fn initSchema(self: *Database) !void {
@@ -161,6 +183,9 @@ pub const Database = struct {
     }
 
     pub fn exec(self: *Database, sql: []const u8) !void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
         const sql_z = try self.allocator.dupeZ(u8, sql);
         defer self.allocator.free(sql_z);
 
@@ -176,6 +201,9 @@ pub const Database = struct {
     }
 
     pub fn prepare(self: *Database, sql: []const u8) !Statement {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
         const sql_z = try self.allocator.dupeZ(u8, sql);
         defer self.allocator.free(sql_z);
 
@@ -197,6 +225,9 @@ pub const Database = struct {
         password_hash: []const u8,
         email: []const u8,
     ) !i64 {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
         const sql =
             \\INSERT INTO users (username, password_hash, email, created_at, updated_at)
             \\VALUES (?1, ?2, ?3, ?4, ?5)
@@ -239,6 +270,9 @@ pub const Database = struct {
     }
 
     pub fn getUserByUsername(self: *Database, username: []const u8) !User {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
         const sql =
             \\SELECT id, username, password_hash, email, enabled, created_at, updated_at
             \\FROM users
@@ -285,6 +319,9 @@ pub const Database = struct {
     }
 
     pub fn updateUserPassword(self: *Database, username: []const u8, new_password_hash: []const u8) !void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
         const sql =
             \\UPDATE users
             \\SET password_hash = ?1, updated_at = ?2
@@ -319,6 +356,9 @@ pub const Database = struct {
     }
 
     pub fn deleteUser(self: *Database, username: []const u8) !void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
         const sql = "DELETE FROM users WHERE username = ?1";
 
         const sql_z = try self.allocator.dupeZ(u8, sql);
@@ -343,6 +383,9 @@ pub const Database = struct {
     }
 
     pub fn setUserEnabled(self: *Database, username: []const u8, enabled: bool) !void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
         const sql =
             \\UPDATE users
             \\SET enabled = ?1, updated_at = ?2

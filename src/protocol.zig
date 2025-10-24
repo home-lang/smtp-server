@@ -156,14 +156,14 @@ pub const Session = struct {
             self.allocator.free(hostname);
         }
         self.conn_wrapper.deinitTls();
-        // Clean up TLS reader/writer using raw memory operations
+        // Clean up TLS reader/writer - use properly aligned free
         if (self.tls_reader_info) |info| {
-            const ptr_slice = @as([*]u8, @ptrCast(info.ptr))[0..info.size];
-            self.allocator.free(ptr_slice);
+            const ptr_aligned: [*]align(@alignOf(*anyopaque)) u8 = @ptrCast(@alignCast(info.ptr));
+            self.allocator.free(ptr_aligned[0..info.size]);
         }
         if (self.tls_writer_info) |info| {
-            const ptr_slice = @as([*]u8, @ptrCast(info.ptr))[0..info.size];
-            self.allocator.free(ptr_slice);
+            const ptr_aligned: [*]align(@alignOf(*anyopaque)) u8 = @ptrCast(@alignCast(info.ptr));
+            self.allocator.free(ptr_aligned[0..info.size]);
         }
         // Clean up TLS buffers
         if (self.tls_input_buf) |buf| {
@@ -475,7 +475,18 @@ pub const Session = struct {
         var line_pos: usize = 0;
         var prev_was_crlf = false;
 
+        // Start DATA timeout timer
+        const data_start_time = std.time.milliTimestamp();
+        const data_timeout_ms = @as(i64, self.config.data_timeout_seconds) * 1000;
+
         while (true) {
+            // Check if DATA timeout has been exceeded
+            const elapsed_ms = std.time.milliTimestamp() - data_start_time;
+            if (elapsed_ms > data_timeout_ms) {
+                self.logger.warn("DATA timeout exceeded for {s} after {d}ms", .{ self.remote_addr, elapsed_ms });
+                try self.sendResponse(writer, 451, "DATA timeout - message transfer took too long", null);
+                return error.DataTimeout;
+            }
             // Read byte by byte
             const byte_read = try self.conn_wrapper.read(line_buffer[line_pos .. line_pos + 1]);
             if (byte_read == 0) break;

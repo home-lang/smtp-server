@@ -2,6 +2,16 @@
 
 ## Recent Updates 📝
 
+### v0.21.0 (2025-10-24) - Thread Safety, Performance & Documentation
+- ✅ **Database Thread Safety**: Added mutex protection to all Database methods (CRITICAL FIX)
+- ✅ **SQLite WAL Mode**: Enabled Write-Ahead Logging for better concurrent read performance
+- ✅ **Greylist Thread Safety**: Verified mutex protection (already thread-safe)
+- ✅ **DATA Command Timeout**: Configurable timeout enforcement for DATA phase
+- ✅ **Environment Variable Configuration**: SMTP_DATA_TIMEOUT_SECONDS support
+- ✅ **Timeout Logging**: Warning logs for timeout events with elapsed time tracking
+- ✅ **Thread Safety Audit**: Comprehensive audit document with recommendations
+- ✅ **TLS Proxy Documentation**: Complete setup guide for nginx/HAProxy TLS termination
+
 ### v0.20.0 (2025-01-24) - HTTPS Webhooks & Security Improvements
 - ✅ **HTTPS Webhook Support**: TLS client for secure webhook notifications
 - ✅ **Certificate Verification**: Optional certificate verification with insecure skip option

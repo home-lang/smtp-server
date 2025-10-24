@@ -10,7 +10,13 @@ pub const Config = struct {
     tls_key_path: ?[]const u8,
     enable_auth: bool,
     max_message_size: usize,
-    timeout_seconds: u32,
+
+    // Timeout configuration with granularity
+    timeout_seconds: u32,           // General connection timeout
+    data_timeout_seconds: u32,      // Specific timeout for DATA command
+    command_timeout_seconds: u32,   // Timeout between commands
+    greeting_timeout_seconds: u32,  // Timeout for initial greeting
+
     rate_limit_per_ip: u32,
     max_recipients: usize,
     hostname: []const u8,
@@ -50,7 +56,10 @@ fn loadDefaults(allocator: std.mem.Allocator) !Config {
         .tls_key_path = null,
         .enable_auth = true,
         .max_message_size = 10 * 1024 * 1024, // 10MB
-        .timeout_seconds = 300, // 5 minutes
+        .timeout_seconds = 300, // 5 minutes - general connection timeout
+        .data_timeout_seconds = 600, // 10 minutes for DATA phase
+        .command_timeout_seconds = 300, // 5 minutes between commands
+        .greeting_timeout_seconds = 30, // 30 seconds for initial greeting
         .rate_limit_per_ip = 100, // messages per hour
         .max_recipients = 100,
         .hostname = try allocator.dupe(u8, "localhost"),
@@ -92,6 +101,26 @@ fn applyEnvironmentVariables(allocator: std.mem.Allocator, cfg: *Config) !void {
     // SMTP_MAX_RECIPIENTS
     if (std.posix.getenv("SMTP_MAX_RECIPIENTS")) |value| {
         cfg.max_recipients = std.fmt.parseInt(usize, value, 10) catch cfg.max_recipients;
+    }
+
+    // SMTP_TIMEOUT_SECONDS (connection timeout)
+    if (std.posix.getenv("SMTP_TIMEOUT_SECONDS")) |value| {
+        cfg.timeout_seconds = std.fmt.parseInt(u32, value, 10) catch cfg.timeout_seconds;
+    }
+
+    // SMTP_DATA_TIMEOUT_SECONDS (DATA command timeout)
+    if (std.posix.getenv("SMTP_DATA_TIMEOUT_SECONDS")) |value| {
+        cfg.data_timeout_seconds = std.fmt.parseInt(u32, value, 10) catch cfg.data_timeout_seconds;
+    }
+
+    // SMTP_COMMAND_TIMEOUT_SECONDS (timeout between commands)
+    if (std.posix.getenv("SMTP_COMMAND_TIMEOUT_SECONDS")) |value| {
+        cfg.command_timeout_seconds = std.fmt.parseInt(u32, value, 10) catch cfg.command_timeout_seconds;
+    }
+
+    // SMTP_GREETING_TIMEOUT_SECONDS (timeout for initial greeting)
+    if (std.posix.getenv("SMTP_GREETING_TIMEOUT_SECONDS")) |value| {
+        cfg.greeting_timeout_seconds = std.fmt.parseInt(u32, value, 10) catch cfg.greeting_timeout_seconds;
     }
 
     // SMTP_ENABLE_TLS
