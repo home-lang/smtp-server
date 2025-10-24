@@ -2,8 +2,8 @@
 // Usage: search-cli <command> [options]
 
 const std = @import("std");
-const search = @import("search.zig");
-const database = @import("database.zig");
+const search = @import("api/search.zig");
+const database = @import("storage/database.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};

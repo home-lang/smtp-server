@@ -1,6 +1,6 @@
 const std = @import("std");
 const testing = std.testing;
-const security = @import("security.zig");
+const security = @import("auth/security.zig");
 
 test "email validation - valid addresses" {
     try testing.expect(security.validateEmailAddress("user@example.com"));

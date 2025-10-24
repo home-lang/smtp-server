@@ -1,8 +1,8 @@
 const std = @import("std");
-const database = @import("database.zig");
-const auth_mod = @import("auth.zig");
-const queue_mod = @import("queue.zig");
-const filter_mod = @import("filter.zig");
+const database = @import("../storage/database.zig");
+const auth_mod = @import("auth/auth.zig");
+const queue_mod = @import("../delivery/queue.zig");
+const filter_mod = @import("../message/filter.zig");
 const search_mod = @import("search.zig");
 
 /// REST API server for SMTP management

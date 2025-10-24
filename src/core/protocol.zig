@@ -1,13 +1,13 @@
 const std = @import("std");
 const net = std.net;
 const config = @import("config.zig");
-const auth = @import("auth.zig");
+const auth = @import("../auth/auth.zig");
 const logger = @import("logger.zig");
-const security = @import("security.zig");
-const webhook = @import("webhook.zig");
-const greylist_mod = @import("greylist.zig");
+const security = @import("../auth/security.zig");
+const webhook = @import("../features/webhook.zig");
+const greylist_mod = @import("../antispam/greylist.zig");
 const tls_mod = @import("tls.zig");
-const chunking = @import("chunking.zig");
+const chunking = @import("../protocol/chunking.zig");
 
 const SMTPCommand = enum {
     HELO,

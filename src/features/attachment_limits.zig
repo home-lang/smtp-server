@@ -1,6 +1,6 @@
 const std = @import("std");
-const database = @import("database.zig");
-const attachment = @import("attachment.zig");
+const database = @import("../storage/database.zig");
+const attachment = @import("../message/attachment.zig");
 
 /// Attachment size limit management
 /// Enforces per-user and global attachment size restrictions

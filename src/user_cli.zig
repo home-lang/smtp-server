@@ -1,7 +1,7 @@
 const std = @import("std");
-const database = @import("database.zig");
-const password_mod = @import("password.zig");
-const auth = @import("auth.zig");
+const database = @import("storage/database.zig");
+const password_mod = @import("auth/password.zig");
+const auth = @import("auth/auth.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};

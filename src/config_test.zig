@@ -1,6 +1,6 @@
 const std = @import("std");
 const testing = std.testing;
-const config = @import("config.zig");
+const config = @import("core/config.zig");
 
 test "configuration can be created with different values" {
     // Test that we can create configs with defaults

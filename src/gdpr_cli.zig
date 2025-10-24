@@ -1,5 +1,5 @@
 const std = @import("std");
-const gdpr = @import("gdpr.zig");
+const gdpr = @import("features/gdpr.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};

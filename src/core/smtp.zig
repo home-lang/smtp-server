@@ -1,14 +1,14 @@
 const std = @import("std");
 const net = std.net;
 const config = @import("config.zig");
-const auth = @import("auth.zig");
-const database = @import("database.zig");
+const auth = @import("../auth/auth.zig");
+const database = @import("../storage/database.zig");
 const protocol = @import("protocol.zig");
 const logger = @import("logger.zig");
-const security = @import("security.zig");
+const security = @import("../auth/security.zig");
 const tls_mod = @import("tls.zig");
-const dnsbl = @import("dnsbl.zig");
-const greylist_mod = @import("greylist.zig");
+const dnsbl = @import("../antispam/dnsbl.zig");
+const greylist_mod = @import("../antispam/greylist.zig");
 
 pub const Server = struct {
     allocator: std.mem.Allocator,

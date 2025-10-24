@@ -1,5 +1,5 @@
 const std = @import("std");
-const logger = @import("logger.zig");
+const logger = @import("../core/logger.zig");
 const tls = @import("tls");
 
 pub const WebhookConfig = struct {

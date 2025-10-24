@@ -137,7 +137,7 @@ pub const SMTPBenchmarks = struct {
 
     /// Benchmark email address validation
     pub fn benchmarkEmailValidation(self: *SMTPBenchmarks) !void {
-        const security = @import("security.zig");
+        const security = @import("../auth/security.zig");
         _ = security.isValidEmail("test@example.com");
         _ = self;
     }

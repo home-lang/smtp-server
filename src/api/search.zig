@@ -2,7 +2,7 @@
 // Provides fast, full-text search across email messages
 
 const std = @import("std");
-const database = @import("database.zig");
+const database = @import("../storage/database.zig");
 const sqlite = @cImport({
     @cInclude("sqlite3.h");
 });

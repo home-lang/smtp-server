@@ -1,5 +1,5 @@
 const std = @import("std");
-const database = @import("database.zig");
+const database = @import("../storage/database.zig");
 
 /// User quota management
 /// Tracks storage usage and enforces limits per user

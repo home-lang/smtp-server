@@ -1,6 +1,6 @@
 const std = @import("std");
 const testing = std.testing;
-const errors = @import("errors.zig");
+const errors = @import("core/errors.zig");
 
 test "error info - message too large" {
     const err_info = errors.getErrorInfo(errors.SmtpError.MessageTooLarge);
