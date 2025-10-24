@@ -3,6 +3,8 @@ const smtp = @import("smtp.zig");
 const config = @import("config.zig");
 const logger = @import("logger.zig");
 const args_parser = @import("args.zig");
+const database = @import("database.zig");
+const auth = @import("auth.zig");
 
 // Global shutdown flag
 var shutdown_requested = std.atomic.Value(bool).init(false);
@@ -71,8 +73,32 @@ pub fn main() !void {
 
     log.info("Signal handlers installed (SIGINT, SIGTERM)", .{});
 
+    // Initialize database and auth backend if auth is enabled
+    var db: ?database.Database = null;
+    var auth_backend: ?auth.AuthBackend = null;
+    var db_ptr: ?*database.Database = null;
+    var auth_ptr: ?*auth.AuthBackend = null;
+
+    if (cfg.enable_auth) {
+        const db_path = std.posix.getenv("SMTP_DB_PATH") orelse "./smtp.db";
+        log.info("Initializing database at: {s}", .{db_path});
+
+        db = try database.Database.init(allocator, db_path);
+        errdefer if (db) |*d| d.deinit();
+
+        db_ptr = &db.?;
+        auth_backend = auth.AuthBackend.init(allocator, db_ptr.?);
+        auth_ptr = &auth_backend.?;
+
+        log.info("Database-backed authentication enabled", .{});
+    } else {
+        log.info("Authentication disabled", .{});
+    }
+
+    defer if (db) |*d| d.deinit();
+
     // Create and start SMTP server
-    var server = try smtp.Server.init(allocator, cfg, &log);
+    var server = try smtp.Server.init(allocator, cfg, &log, db_ptr, auth_ptr);
     defer server.deinit();
 
     log.info("Starting SMTP server...", .{});

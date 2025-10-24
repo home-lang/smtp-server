@@ -2,6 +2,7 @@ const std = @import("std");
 const net = std.net;
 const config = @import("config.zig");
 const auth = @import("auth.zig");
+const database = @import("database.zig");
 const protocol = @import("protocol.zig");
 const logger = @import("logger.zig");
 const security = @import("security.zig");
@@ -16,8 +17,16 @@ pub const Server = struct {
     active_connections: std.atomic.Value(u32),
     rate_limiter: security.RateLimiter,
     tls_context: ?tls_mod.TlsContext,
+    db: ?*database.Database,
+    auth_backend: ?*auth.AuthBackend,
 
-    pub fn init(allocator: std.mem.Allocator, cfg: config.Config, log: *logger.Logger) !Server {
+    pub fn init(
+        allocator: std.mem.Allocator,
+        cfg: config.Config,
+        log: *logger.Logger,
+        db: ?*database.Database,
+        auth_backend: ?*auth.AuthBackend,
+    ) !Server {
         // Rate limiter: max messages per hour per IP
         const rate_limiter = security.RateLimiter.init(
             allocator,
@@ -45,6 +54,8 @@ pub const Server = struct {
             .active_connections = std.atomic.Value(u32).init(0),
             .rate_limiter = rate_limiter,
             .tls_context = tls_ctx,
+            .db = db,
+            .auth_backend = auth_backend,
         };
     }
 
@@ -157,6 +168,7 @@ pub const Server = struct {
             ctx.remote_addr,
             &ctx.server.rate_limiter,
             tls_ctx_ptr,
+            ctx.server.auth_backend,
         ) catch |err| {
             ctx.server.logger.err("Failed to initialize session from {s}: {}", .{ ctx.remote_addr, err });
             return;

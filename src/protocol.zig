@@ -30,9 +30,50 @@ const SessionState = enum {
     Authenticated,
 };
 
+/// Connection wrapper that abstracts TLS and plain TCP
+const ConnectionWrapper = struct {
+    tcp_stream: net.Stream,
+    tls_conn: ?tls_mod.TlsConnection,
+    using_tls: bool,
+
+    pub fn read(self: *ConnectionWrapper, buffer: []u8) !usize {
+        if (self.using_tls) {
+            if (self.tls_conn) |*conn| {
+                return conn.read(buffer);
+            }
+            return error.TlsNotActive;
+        }
+        return self.tcp_stream.read(buffer);
+    }
+
+    pub fn write(self: *ConnectionWrapper, data: []const u8) !usize {
+        if (self.using_tls) {
+            if (self.tls_conn) |*conn| {
+                return conn.write(data);
+            }
+            return error.TlsNotActive;
+        }
+        return self.tcp_stream.write(data);
+    }
+
+    pub fn upgradeToTls(self: *ConnectionWrapper, tls_conn: tls_mod.TlsConnection) void {
+        self.tls_conn = tls_conn;
+        self.using_tls = true;
+    }
+
+    pub fn deinitTls(self: *ConnectionWrapper) void {
+        if (self.tls_conn) |*conn| {
+            var c = conn.*;
+            c.deinit();
+            self.tls_conn = null;
+        }
+    }
+};
+
 pub const Session = struct {
     allocator: std.mem.Allocator,
     connection: net.Server.Connection,
+    conn_wrapper: ConnectionWrapper,
     config: config.Config,
     state: SessionState,
     mail_from: ?[]u8,
@@ -45,8 +86,13 @@ pub const Session = struct {
     start_time: i64,
     last_activity: i64,
     tls_context: ?*tls_mod.TlsContext,
-    tls_connection: ?tls_mod.TlsConnection,
-    using_tls: bool,
+    auth_backend: ?*auth.AuthBackend,
+    // TLS I/O buffers and reader/writer stored at session scope for lifetime management
+    tls_input_buf: ?[]u8,
+    tls_output_buf: ?[]u8,
+    // Store the actual reader/writer structures info for proper cleanup
+    tls_reader_info: ?struct { ptr: *anyopaque, size: usize },
+    tls_writer_info: ?struct { ptr: *anyopaque, size: usize },
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -56,11 +102,17 @@ pub const Session = struct {
         remote_addr: []const u8,
         rate_limiter: *security.RateLimiter,
         tls_context: ?*tls_mod.TlsContext,
+        auth_backend: ?*auth.AuthBackend,
     ) !Session {
         const now = std.time.timestamp();
         return Session{
             .allocator = allocator,
             .connection = connection,
+            .conn_wrapper = ConnectionWrapper{
+                .tcp_stream = connection.stream,
+                .tls_conn = null,
+                .using_tls = false,
+            },
             .config = cfg,
             .state = .Initial,
             .mail_from = null,
@@ -73,8 +125,11 @@ pub const Session = struct {
             .start_time = now,
             .last_activity = now,
             .tls_context = tls_context,
-            .tls_connection = null,
-            .using_tls = false,
+            .auth_backend = auth_backend,
+            .tls_input_buf = null,
+            .tls_output_buf = null,
+            .tls_reader_info = null,
+            .tls_writer_info = null,
         };
     }
 
@@ -89,9 +144,22 @@ pub const Session = struct {
         if (self.client_hostname) |hostname| {
             self.allocator.free(hostname);
         }
-        if (self.tls_connection) |*tls_conn| {
-            var conn = tls_conn.*;
-            conn.deinit();
+        self.conn_wrapper.deinitTls();
+        // Clean up TLS reader/writer using raw memory operations
+        if (self.tls_reader_info) |info| {
+            const ptr_slice = @as([*]u8, @ptrCast(info.ptr))[0..info.size];
+            self.allocator.free(ptr_slice);
+        }
+        if (self.tls_writer_info) |info| {
+            const ptr_slice = @as([*]u8, @ptrCast(info.ptr))[0..info.size];
+            self.allocator.free(ptr_slice);
+        }
+        // Clean up TLS buffers
+        if (self.tls_input_buf) |buf| {
+            self.allocator.free(buf);
+        }
+        if (self.tls_output_buf) |buf| {
+            self.allocator.free(buf);
         }
     }
 
@@ -121,7 +189,7 @@ pub const Session = struct {
             try self.checkTimeout();
 
             // Read byte by byte until we hit \n
-            const byte_read = self.connection.stream.read(line_buffer[line_pos .. line_pos + 1]) catch |err| {
+            const byte_read = self.conn_wrapper.read(line_buffer[line_pos .. line_pos + 1]) catch |err| {
                 if (err == error.EndOfStream) break;
                 return err;
             };
@@ -231,20 +299,20 @@ pub const Session = struct {
         // Send EHLO response with extensions
         var ehlo_buf: [256]u8 = undefined;
         const ehlo_line = try std.fmt.bufPrint(&ehlo_buf, "250-{s}\r\n", .{self.config.hostname});
-        _ = try self.connection.stream.write(ehlo_line);
-        _ = try self.connection.stream.write("250-SIZE 10485760\r\n");
-        _ = try self.connection.stream.write("250-8BITMIME\r\n");
-        _ = try self.connection.stream.write("250-PIPELINING\r\n");
+        _ = try self.conn_wrapper.write(ehlo_line);
+        _ = try self.conn_wrapper.write("250-SIZE 10485760\r\n");
+        _ = try self.conn_wrapper.write("250-8BITMIME\r\n");
+        _ = try self.conn_wrapper.write("250-PIPELINING\r\n");
 
         if (self.config.enable_auth) {
-            _ = try self.connection.stream.write("250-AUTH PLAIN LOGIN\r\n");
+            _ = try self.conn_wrapper.write("250-AUTH PLAIN LOGIN\r\n");
         }
 
         if (self.config.enable_tls) {
-            _ = try self.connection.stream.write("250-STARTTLS\r\n");
+            _ = try self.conn_wrapper.write("250-STARTTLS\r\n");
         }
 
-        _ = try self.connection.stream.write("250 HELP\r\n");
+        _ = try self.conn_wrapper.write("250 HELP\r\n");
     }
 
     fn handleMail(self: *Session, writer: anytype, line: []const u8) !void {
@@ -338,7 +406,7 @@ pub const Session = struct {
 
         while (true) {
             // Read byte by byte
-            const byte_read = try self.connection.stream.read(line_buffer[line_pos .. line_pos + 1]);
+            const byte_read = try self.conn_wrapper.read(line_buffer[line_pos .. line_pos + 1]);
             if (byte_read == 0) break;
 
             if (line_buffer[line_pos] == '\n') {
@@ -457,14 +525,48 @@ pub const Session = struct {
         };
 
         if (std.ascii.eqlIgnoreCase(mechanism, "PLAIN")) {
-            // For simplicity, accept any authentication (in production, verify credentials)
-            self.authenticated = true;
-            self.state = .Authenticated;
-            try self.sendResponse(writer, 235, "Authentication successful", null);
+            // Get the initial response (base64 encoded credentials)
+            const initial_response = it.next();
+
+            if (initial_response) |encoded| {
+                // Decode and verify credentials
+                if (self.auth_backend) |backend| {
+                    const credentials = auth.decodeBase64Auth(self.allocator, encoded) catch {
+                        try self.sendResponse(writer, 535, "Authentication failed", null);
+                        return;
+                    };
+                    defer {
+                        self.allocator.free(credentials.username);
+                        self.allocator.free(credentials.password);
+                    }
+
+                    const valid = backend.verifyCredentials(credentials.username, credentials.password) catch {
+                        try self.sendResponse(writer, 454, "Temporary authentication failure", null);
+                        return;
+                    };
+
+                    if (valid) {
+                        self.authenticated = true;
+                        self.state = .Authenticated;
+                        self.logger.info("User '{s}' authenticated successfully", .{credentials.username});
+                        try self.sendResponse(writer, 235, "Authentication successful", null);
+                    } else {
+                        self.logger.warn("Authentication failed for user '{s}'", .{credentials.username});
+                        try self.sendResponse(writer, 535, "Authentication failed", null);
+                    }
+                } else {
+                    // No auth backend configured - fall back to accepting all (development mode)
+                    self.logger.warn("No auth backend configured - accepting all credentials", .{});
+                    self.authenticated = true;
+                    self.state = .Authenticated;
+                    try self.sendResponse(writer, 235, "Authentication successful", null);
+                }
+            } else {
+                try self.sendResponse(writer, 501, "AUTH PLAIN requires initial-response", null);
+            }
         } else if (std.ascii.eqlIgnoreCase(mechanism, "LOGIN")) {
-            self.authenticated = true;
-            self.state = .Authenticated;
-            try self.sendResponse(writer, 235, "Authentication successful", null);
+            // LOGIN mechanism not yet implemented - would require multi-step interaction
+            try self.sendResponse(writer, 504, "AUTH LOGIN not yet implemented", null);
         } else {
             try self.sendResponse(writer, 504, "Unrecognized authentication type", null);
         }
@@ -477,7 +579,7 @@ pub const Session = struct {
         }
 
         // Check if already using TLS
-        if (self.using_tls) {
+        if (self.conn_wrapper.using_tls) {
             try self.sendResponse(writer, 454, "TLS already active", null);
             return;
         }
@@ -494,20 +596,85 @@ pub const Session = struct {
 
         self.logger.info("STARTTLS command accepted - starting TLS handshake", .{});
 
-        // Perform TLS handshake
-        const tls_conn = tls_mod.upgradeToTls(
+        const tls = @import("tls");
+
+        // Load CertKeyPair fresh for this handshake with absolute paths
+        const cert_path = self.tls_context.?.config.cert_path orelse return error.TlsNotConfigured;
+        const key_path = self.tls_context.?.config.key_path orelse return error.TlsNotConfigured;
+
+        // Convert to absolute paths
+        var cert_path_buf: [std.fs.max_path_bytes]u8 = undefined;
+        var key_path_buf: [std.fs.max_path_bytes]u8 = undefined;
+
+        const abs_cert_path = if (std.fs.path.isAbsolute(cert_path))
+            cert_path
+        else
+            try std.fs.cwd().realpath(cert_path, &cert_path_buf);
+
+        const abs_key_path = if (std.fs.path.isAbsolute(key_path))
+            key_path
+        else
+            try std.fs.cwd().realpath(key_path, &key_path_buf);
+
+        var cert_key = tls.config.CertKeyPair.fromFilePathAbsolute(
             self.allocator,
-            self.connection.stream,
-            self.tls_context.?,
-            self.logger,
+            abs_cert_path,
+            abs_key_path,
         ) catch |err| {
+            self.logger.err("Failed to load certificate/key: {}", .{err});
+            return error.InvalidCertificate;
+        };
+        defer cert_key.deinit(self.allocator);
+
+        // Allocate TLS I/O buffers at session scope
+        const input_buf = try self.allocator.alloc(u8, tls.input_buffer_len);
+        errdefer self.allocator.free(input_buf);
+
+        const output_buf = try self.allocator.alloc(u8, tls.output_buffer_len);
+        errdefer self.allocator.free(output_buf);
+
+        // Create heap-allocated reader/writer that persist for session lifetime
+        // net.Stream.reader() and .writer() take buffer parameters
+        const ReaderType = @TypeOf(self.connection.stream.reader(input_buf));
+        const WriterType = @TypeOf(self.connection.stream.writer(output_buf));
+
+        const reader_ptr = try self.allocator.create(ReaderType);
+        errdefer self.allocator.destroy(reader_ptr);
+        reader_ptr.* = self.connection.stream.reader(input_buf);
+
+        const writer_ptr = try self.allocator.create(WriterType);
+        errdefer self.allocator.destroy(writer_ptr);
+        writer_ptr.* = self.connection.stream.writer(output_buf);
+
+        // Get Io.Reader and Io.Writer interfaces from the reader/writer structures
+        const reader_interface = if (@hasField(ReaderType, "interface"))
+            &reader_ptr.interface
+        else
+            reader_ptr.interface();
+        const writer_interface = &writer_ptr.interface;
+
+        // Perform TLS handshake using the interfaces (already pointers)
+        const tls_conn = tls.server(reader_interface, writer_interface, .{
+            .auth = &cert_key,
+        }) catch |err| {
             self.logger.err("TLS handshake failed: {}", .{err});
+            self.allocator.destroy(writer_ptr);
+            self.allocator.destroy(reader_ptr);
+            self.allocator.free(output_buf);
+            self.allocator.free(input_buf);
             return err;
         };
 
-        // Successfully upgraded to TLS
-        self.tls_connection = tls_conn;
-        self.using_tls = true;
+        self.logger.info("TLS handshake successful", .{});
+
+        // Store everything in session for lifetime management
+        self.tls_input_buf = input_buf;
+        self.tls_output_buf = output_buf;
+        self.tls_reader_info = .{ .ptr = reader_ptr, .size = @sizeOf(ReaderType) };
+        self.tls_writer_info = .{ .ptr = writer_ptr, .size = @sizeOf(WriterType) };
+
+        // Successfully upgraded to TLS - update the connection wrapper
+        self.conn_wrapper.upgradeToTls(tls_mod.TlsConnection{ .conn = tls_conn });
 
         // Reset session state after TLS upgrade as per RFC
         self.state = .Initial;
@@ -517,14 +684,13 @@ pub const Session = struct {
     }
 
     fn sendResponse(self: *Session, writer: anytype, code: u16, message: []const u8, extra: ?[]const u8) !void {
-        const stream = self.connection.stream;
         var response_buf: [1024]u8 = undefined;
         const response = if (extra) |ext|
             try std.fmt.bufPrint(&response_buf, "{d} {s} {s}\r\n", .{ code, message, ext })
         else
             try std.fmt.bufPrint(&response_buf, "{d} {s}\r\n", .{ code, message });
 
-        _ = try stream.write(response);
+        _ = try self.conn_wrapper.write(response);
         _ = writer;
     }
 

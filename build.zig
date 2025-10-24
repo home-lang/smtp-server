@@ -4,12 +4,12 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // Add tls.zig dependency
-    const tls_module = b.createModule(.{
-        .root_source_file = b.path("vendor/tls/src/root.zig"),
+    // Add zig-tls dependency
+    const tls = b.dependency("tls", .{
         .target = target,
         .optimize = optimize,
     });
+    const tls_module = tls.module("tls");
 
     // Create the root module
     const root_module = b.createModule(.{
@@ -24,7 +24,26 @@ pub fn build(b: *std.Build) void {
         .root_module = root_module,
     });
 
+    // Link SQLite3
+    exe.linkLibC();
+    exe.linkSystemLibrary("sqlite3");
+
     b.installArtifact(exe);
+
+    // User management CLI tool
+    const user_cli_module = b.createModule(.{
+        .root_source_file = b.path("src/user_cli.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const user_cli = b.addExecutable(.{
+        .name = "user-cli",
+        .root_module = user_cli_module,
+    });
+    user_cli.linkLibC();
+    user_cli.linkSystemLibrary("sqlite3");
+    b.installArtifact(user_cli);
 
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());

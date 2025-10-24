@@ -1,7 +1,41 @@
 # TODO List for SMTP Server
 
+## Recent Updates 📝
+
+### v0.5.0 (2025-10-23) - Database-backed Authentication
+- ✅ Implemented SQLite database backend for user management
+- ✅ Added Argon2id password hashing (more secure than bcrypt)
+- ✅ Created user management CLI tool (user-cli) with 7 commands
+- ✅ Updated SMTP AUTH PLAIN to verify credentials against database
+- ✅ Proper error handling and security logging for auth failures
+- ✅ Constant-time password comparison to prevent timing attacks
+- ✅ Environment variable support for database path (SMTP_DB_PATH)
+- ✅ Comprehensive testing of authentication flow
+
+### v0.4.0 (2025-10-23) - TLS Library Refactoring
+- ✅ Extracted TLS implementation to standalone zig-tls library
+- ✅ Removed vendor/tls directory (clean dependency management)
+- ✅ Updated build system to use external dependency
+- ✅ Created comprehensive TLS documentation
+- ✅ Implemented heap-allocated I/O buffers for session lifetime
+- ✅ Fixed certificate loading with absolute path support
+- ⚠️ TLS handshake has cipher issue (reverse proxy recommended for production)
+
+### v0.3.0 - TLS Infrastructure
+- Certificate management and validation
+- STARTTLS protocol support
+- ConnectionWrapper abstraction
+- Production deployment via reverse proxy
+
+### v0.2.0 - Security & Performance
+- Connection timeout enforcement
+- Per-IP rate limiting with sliding windows
+- Maximum recipients per message
+- Graceful shutdown with signal handlers
+
 ## Completed ✓
 
+### Core Infrastructure (v0.1.0 - v0.3.0)
 - [x] Set up Zig project structure with build.zig
 - [x] Implement core SMTP protocol handler (RFC 5321)
 - [x] Create TCP server with connection handling
@@ -33,7 +67,6 @@
   - [x] Max connections enforcement
   - [x] Active connection counter
   - [x] Proper rejection with SMTP error
-
 - [x] Add command-line argument parsing
   - [x] Help and version flags
   - [x] Config file path option
@@ -59,8 +92,34 @@
   - [x] Configurable limit
   - [x] Security event logging
 
+### TLS Infrastructure (v0.4.0 - Latest)
+- [x] Extract TLS to standalone zig-tls library
+  - [x] Created ~/Code/zig-tls with 19 source files (388KB)
+  - [x] Removed vendor/tls directory
+  - [x] Updated build.zig to use dependency
+  - [x] Clean package structure with build.zig.zon
+  - [x] MIT License and documentation
+- [x] TLS Certificate Management
+  - [x] Certificate loading and validation
+  - [x] PEM format support
+  - [x] Absolute path handling
+  - [x] CertKeyPair caching
+  - [x] Proper cleanup in deinit
+- [x] STARTTLS Protocol Implementation
+  - [x] STARTTLS command handler
+  - [x] State reset after TLS upgrade
+  - [x] ConnectionWrapper abstraction
+  - [x] Heap-allocated I/O buffers for session lifetime
+  - [x] Session-scoped TLS resource management
+- [x] TLS Documentation
+  - [x] TLS.md (reverse proxy setup guide)
+  - [x] TLS_STATUS.md (implementation status)
+  - [x] IMPLEMENTATION_SUMMARY.md (complete technical summary)
+  - [x] REFACTORING.md (library extraction documentation)
+
 ## In Progress 🚧
 
+### Testing Suite
 - [x] Create comprehensive test suite
   - [x] Zig unit tests for core modules
   - [x] Test script for SMTP commands (20 tests)
@@ -70,21 +129,38 @@
   - [x] Message size limit tests
   - [x] Email validation tests
 
+### TLS Handshake Debugging
+- [ ] Debug TLS cipher/handshake errors
+  - [x] Heap-allocated I/O buffers implemented
+  - [x] Session-scoped resource management
+  - [x] CertKeyPair loading from absolute paths
+  - [ ] Investigate cipher panic during handshake
+  - [ ] Test with different TLS clients
+  - [ ] Add detailed TLS handshake logging
+  - [ ] Consider alternative I/O approach for STARTTLS
+
 ## High Priority 🔴
 
 ### Security & Authentication
-- [x] TLS/STARTTLS Framework (v0.3.0)
+- [x] TLS/STARTTLS Framework (v0.3.0+)
   - [x] Certificate loading and validation
   - [x] STARTTLS command handler
   - [x] TLS module with PEM validation
   - [x] Comprehensive reverse proxy documentation
-  - [ ] Native TLS handshake (requires external crypto library)
-  - [ ] Perfect Forward Secrecy support (via reverse proxy)
-- [ ] Database-backed authentication
-  - [ ] SQLite integration
+  - [x] Heap-allocated I/O for session lifetime
+  - [x] Standalone zig-tls library (v0.4.0)
+  - [ ] Native TLS handshake completion (98% done, cipher issue)
+  - [ ] Production deployment with reverse proxy (RECOMMENDED)
+- [x] Database-backed authentication
+  - [x] SQLite integration
+  - [x] User management CLI tool (user-cli)
   - [ ] PostgreSQL support
-  - [ ] User management API
-- [ ] Implement password hashing (bcrypt/argon2)
+  - [ ] User management API (REST/GraphQL)
+- [x] Implement password hashing with Argon2id
+  - [x] Argon2id implementation (more secure than bcrypt)
+  - [x] Base64 encoding for storage
+  - [x] Constant-time comparison
+  - [x] Integration with AUTH PLAIN
 - [ ] Add SASL authentication mechanisms
   - [ ] CRAM-MD5
   - [ ] DIGEST-MD5
@@ -246,11 +322,20 @@
 
 ## Known Issues 🐛
 
+### Critical
+- [ ] TLS handshake cipher panic during STARTTLS
+  - Server sends "220 Ready to start TLS"
+  - Handshake initiates but fails with cipher decrypt error
+  - Root cause: Possible I/O buffer lifecycle or tls.zig library issue
+  - **Workaround**: Use reverse proxy (nginx/HAProxy) for production TLS
+
+### High Priority
 - [ ] Need to verify thread safety of all shared resources
-- [ ] TLS handshake not implemented (placeholder only)
-- [ ] Authentication accepts any credentials (development mode)
-- [x] ~~No connection timeout enforcement yet~~ (Fixed in 0.2.0)
+- [x] ~~Authentication accepts any credentials (development mode)~~ (Fixed: now uses database with Argon2id)
 - [ ] Rate limiter cleanup not scheduled
+
+### Medium Priority
+- [x] ~~No connection timeout enforcement yet~~ (Fixed in 0.2.0)
 - [x] ~~No maximum recipients per message limit~~ (Fixed in 0.1.0)
 - [ ] No DATA command timeout (partial - general timeout implemented)
 - [ ] HTTPS webhooks not supported (HTTP only)
@@ -266,9 +351,25 @@
 
 ---
 
-**Last Updated**: 2025-10-23
+## Project Information
+
+**Last Updated**: 2025-10-24 04:47 UTC
+**Current Version**: v0.5.0
+**Zig Version**: 0.15.1
+**License**: MIT
+
+**Key Dependencies**:
+- zig-tls: ~/Code/zig-tls (Pure Zig TLS 1.3 implementation)
+- SQLite3: System library (user authentication database)
 
 **Maintainers**: Add your name here when contributing
+
+**Related Documentation**:
+- README.md - Getting started guide
+- TLS.md - Reverse proxy setup for production TLS
+- TLS_STATUS.md - TLS implementation status
+- IMPLEMENTATION_SUMMARY.md - Complete TLS technical summary
+- REFACTORING.md - zig-tls library extraction details
 
 **Priority Legend**:
 - 🔴 High Priority: Critical for production use

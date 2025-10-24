@@ -16,6 +16,8 @@ pub const TlsContext = struct {
     config: TlsConfig,
     cert_data: ?[]u8,
     key_data: ?[]u8,
+    // Store the parsed CertKeyPair to reuse across handshakes
+    cert_key_pair: ?tls.config.CertKeyPair,
     logger: *logger.Logger,
 
     pub fn init(allocator: std.mem.Allocator, cfg: TlsConfig, log: *logger.Logger) !TlsContext {
@@ -24,17 +26,23 @@ pub const TlsContext = struct {
             .config = cfg,
             .cert_data = null,
             .key_data = null,
+            .cert_key_pair = null,
             .logger = log,
         };
 
         if (cfg.enabled) {
             try ctx.loadCertificates();
+            try ctx.loadCertKeyPair();
         }
 
         return ctx;
     }
 
     pub fn deinit(self: *TlsContext) void {
+        if (self.cert_key_pair) |*ckp| {
+            var mut_ckp = ckp.*;
+            mut_ckp.deinit(self.allocator);
+        }
         if (self.cert_data) |data| {
             self.allocator.free(data);
         }
@@ -100,15 +108,52 @@ pub const TlsContext = struct {
 
         self.logger.info("TLS certificates validated (format check only)", .{});
     }
+
+    /// Load and parse the CertKeyPair for reuse across handshakes
+    fn loadCertKeyPair(self: *TlsContext) !void {
+        if (!self.config.enabled) return;
+
+        const cert_path = self.config.cert_path orelse return error.TlsNotConfigured;
+        const key_path = self.config.key_path orelse return error.TlsNotConfigured;
+
+        self.logger.info("Loading TLS CertKeyPair...", .{});
+
+        // Convert to absolute paths if needed
+        var cert_path_buf: [std.fs.max_path_bytes]u8 = undefined;
+        var key_path_buf: [std.fs.max_path_bytes]u8 = undefined;
+
+        const abs_cert_path = if (std.fs.path.isAbsolute(cert_path))
+            cert_path
+        else
+            try std.fs.cwd().realpath(cert_path, &cert_path_buf);
+
+        const abs_key_path = if (std.fs.path.isAbsolute(key_path))
+            key_path
+        else
+            try std.fs.cwd().realpath(key_path, &key_path_buf);
+
+        const cert_key = tls.config.CertKeyPair.fromFilePathAbsolute(
+            self.allocator,
+            abs_cert_path,
+            abs_key_path,
+        ) catch |err| {
+            self.logger.err("Failed to load CertKeyPair: {}", .{err});
+            return error.CertKeyPairLoadFailed;
+        };
+
+        self.cert_key_pair = cert_key;
+        self.logger.info("CertKeyPair loaded successfully", .{});
+    }
 };
 
 /// TLS connection wrapper
+/// Note: Buffers are owned by caller (Session), not by TlsConnection
 pub const TlsConnection = struct {
     conn: tls.Connection,
-    allocator: std.mem.Allocator,
 
     pub fn deinit(self: *TlsConnection) void {
         self.conn.close() catch {};
+        // Note: Buffers are freed by Session, not here
     }
 
     pub fn read(self: *TlsConnection, buffer: []u8) !usize {
@@ -121,11 +166,14 @@ pub const TlsConnection = struct {
 };
 
 /// Upgrade a plain TCP connection to TLS using tls.zig library
+/// Caller must provide pre-allocated buffers that will persist for the connection's lifetime
 pub fn upgradeToTls(
     allocator: std.mem.Allocator,
     stream: net.Stream,
     ctx: *TlsContext,
     log: *logger.Logger,
+    input_buf: []u8,
+    output_buf: []u8,
 ) !TlsConnection {
     if (!ctx.config.enabled) {
         return error.TlsNotEnabled;
@@ -147,8 +195,23 @@ pub fn upgradeToTls(
     };
     defer auth.deinit(allocator);
 
+    // Use caller-provided buffers that persist at session scope
+    // These buffers MUST remain valid for the lifetime of the TLS connection
+
+    // Create buffered reader/writer with the provided buffers
+    var stream_reader = stream.reader(input_buf);
+    var stream_writer = stream.writer(output_buf);
+
+    // Get interface pointers (these point into stack-local reader/writer structs)
+    const reader_iface = if (@hasField(@TypeOf(stream_reader), "interface"))
+        &stream_reader.interface
+    else
+        stream_reader.interface();
+    const writer_iface = &stream_writer.interface;
+
     // Perform TLS handshake
-    const tls_conn = tls.serverFromStream(stream, .{
+    // The handshake happens synchronously here, reading/writing through the interfaces
+    const tls_conn = tls.server(reader_iface, writer_iface, .{
         .auth = &auth,
     }) catch |err| {
         log.err("TLS handshake failed: {}", .{err});
@@ -159,7 +222,6 @@ pub fn upgradeToTls(
 
     return TlsConnection{
         .conn = tls_conn,
-        .allocator = allocator,
     };
 }
 
