@@ -30,14 +30,11 @@ pub const Server = struct {
 
         self.listener = try address.listen(.{
             .reuse_address = true,
-            .reuse_port = true,
         });
 
         self.running = true;
 
-        const stdout_file = std.io.getStdOut();
-        const stdout = stdout_file.writer();
-        try stdout.print("SMTP Server listening on {s}:{d}\n", .{ self.config.host, self.config.port });
+        std.debug.print("SMTP Server listening on {s}:{d}\n", .{ self.config.host, self.config.port });
 
         while (self.running) {
             const connection = try self.listener.?.accept();

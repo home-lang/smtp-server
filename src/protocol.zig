@@ -43,7 +43,7 @@ pub const Session = struct {
             .config = cfg,
             .state = .Initial,
             .mail_from = null,
-            .rcpt_to = std.ArrayList([]u8).init(allocator),
+            .rcpt_to = std.ArrayList([]u8){},
             .authenticated = false,
             .client_hostname = null,
         };
@@ -56,31 +56,47 @@ pub const Session = struct {
         for (self.rcpt_to.items) |rcpt| {
             self.allocator.free(rcpt);
         }
-        self.rcpt_to.deinit();
+        self.rcpt_to.deinit(self.allocator);
         if (self.client_hostname) |hostname| {
             self.allocator.free(hostname);
         }
     }
 
     pub fn handle(self: *Session) !void {
-        const writer = self.connection.stream.writer();
-        const reader = self.connection.stream.reader();
-
         // Send greeting
-        try self.sendResponse(writer, 220, self.config.hostname, "ESMTP Service Ready");
+        try self.sendResponse(null, 220, self.config.hostname, "ESMTP Service Ready");
 
-        var buffer: [4096]u8 = undefined;
+        var line_buffer: [4096]u8 = undefined;
+        var line_pos: usize = 0;
 
         while (true) {
-            const line = (try reader.readUntilDelimiterOrEof(&buffer, '\n')) orelse break;
+            // Read byte by byte until we hit \n
+            const byte_read = self.connection.stream.read(line_buffer[line_pos .. line_pos + 1]) catch |err| {
+                if (err == error.EndOfStream) break;
+                return err;
+            };
 
-            // Remove \r if present
-            const trimmed = std.mem.trimRight(u8, line, "\r");
+            if (byte_read == 0) break;
 
-            if (trimmed.len == 0) continue;
+            if (line_buffer[line_pos] == '\n') {
+                // Remove \r\n if present
+                const line = if (line_pos > 0 and line_buffer[line_pos - 1] == '\r')
+                    line_buffer[0 .. line_pos - 1]
+                else
+                    line_buffer[0..line_pos];
 
-            const should_quit = try self.processCommand(writer, trimmed);
-            if (should_quit) break;
+                line_pos = 0;
+
+                if (line.len == 0) continue;
+
+                const should_quit = try self.processCommand(null, line);
+                if (should_quit) break;
+            } else {
+                line_pos += 1;
+                if (line_pos >= line_buffer.len) {
+                    return error.LineTooLong;
+                }
+            }
         }
     }
 
@@ -160,20 +176,22 @@ pub const Session = struct {
         self.state = .Greeted;
 
         // Send EHLO response with extensions
-        try writer.print("250-{s}\r\n", .{self.config.hostname});
-        try writer.writeAll("250-SIZE 10485760\r\n");
-        try writer.writeAll("250-8BITMIME\r\n");
-        try writer.writeAll("250-PIPELINING\r\n");
+        var ehlo_buf: [256]u8 = undefined;
+        const ehlo_line = try std.fmt.bufPrint(&ehlo_buf, "250-{s}\r\n", .{self.config.hostname});
+        _ = try self.connection.stream.write(ehlo_line);
+        _ = try self.connection.stream.write("250-SIZE 10485760\r\n");
+        _ = try self.connection.stream.write("250-8BITMIME\r\n");
+        _ = try self.connection.stream.write("250-PIPELINING\r\n");
 
         if (self.config.enable_auth) {
-            try writer.writeAll("250-AUTH PLAIN LOGIN\r\n");
+            _ = try self.connection.stream.write("250-AUTH PLAIN LOGIN\r\n");
         }
 
         if (self.config.enable_tls) {
-            try writer.writeAll("250-STARTTLS\r\n");
+            _ = try self.connection.stream.write("250-STARTTLS\r\n");
         }
 
-        try writer.writeAll("250 HELP\r\n");
+        _ = try self.connection.stream.write("250 HELP\r\n");
     }
 
     fn handleMail(self: *Session, writer: anytype, line: []const u8) !void {
@@ -225,7 +243,7 @@ pub const Session = struct {
             return;
         }
 
-        try self.rcpt_to.append(try self.allocator.dupe(u8, addr));
+        try self.rcpt_to.append(self.allocator, try self.allocator.dupe(u8, addr));
 
         self.state = .RcptTo;
         try self.sendResponse(writer, 250, "OK", null);
@@ -239,16 +257,26 @@ pub const Session = struct {
 
         try self.sendResponse(writer, 354, "Start mail input; end with <CRLF>.<CRLF>", null);
 
-        const reader = self.connection.stream.reader();
-        var message_data = std.ArrayList(u8).init(self.allocator);
-        defer message_data.deinit();
+        var message_data = std.ArrayList(u8){};
+        defer message_data.deinit(self.allocator);
 
-        var buffer: [4096]u8 = undefined;
+        var line_buffer: [4096]u8 = undefined;
+        var line_pos: usize = 0;
         var prev_was_crlf = false;
 
         while (true) {
-            const line = (try reader.readUntilDelimiterOrEof(&buffer, '\n')) orelse break;
-            const trimmed = std.mem.trimRight(u8, line, "\r");
+            // Read byte by byte
+            const byte_read = try self.connection.stream.read(line_buffer[line_pos .. line_pos + 1]);
+            if (byte_read == 0) break;
+
+            if (line_buffer[line_pos] == '\n') {
+                const line = if (line_pos > 0 and line_buffer[line_pos - 1] == '\r')
+                    line_buffer[0 .. line_pos - 1]
+                else
+                    line_buffer[0..line_pos];
+
+                line_pos = 0;
+                const trimmed = line;
 
             // Check for end of data (.)
             if (trimmed.len == 1 and trimmed[0] == '.') {
@@ -263,15 +291,19 @@ pub const Session = struct {
             else
                 trimmed;
 
-            try message_data.appendSlice(data_line);
-            try message_data.append('\n');
+                try message_data.appendSlice(self.allocator, data_line);
+                try message_data.append(self.allocator, '\n');
 
-            prev_was_crlf = trimmed.len == 0;
+                prev_was_crlf = trimmed.len == 0;
 
-            // Enforce max message size
-            if (message_data.items.len > self.config.max_message_size) {
-                try self.sendResponse(writer, 552, "Message size exceeds maximum allowed", null);
-                return;
+                // Enforce max message size
+                if (message_data.items.len > self.config.max_message_size) {
+                    try self.sendResponse(writer, 552, "Message size exceeds maximum allowed", null);
+                    return;
+                }
+            } else {
+                line_pos += 1;
+                if (line_pos >= line_buffer.len) return error.LineTooLong;
             }
         }
 
@@ -316,8 +348,7 @@ pub const Session = struct {
         }
 
         // Parse AUTH mechanism
-        const parts = std.mem.split(u8, line, " ");
-        var it = parts;
+        var it = std.mem.splitScalar(u8, line, ' ');
         _ = it.next(); // Skip AUTH
 
         const mechanism = it.next() orelse {
@@ -340,19 +371,21 @@ pub const Session = struct {
     }
 
     fn handleStartTls(self: *Session, writer: anytype) !void {
-        _ = self;
         // TLS implementation would go here
-        try writer.writeAll("454 TLS not available\r\n");
+        _ = try self.connection.stream.write("454 TLS not available\r\n");
+        _ = writer;
     }
 
     fn sendResponse(self: *Session, writer: anytype, code: u16, message: []const u8, extra: ?[]const u8) !void {
-        _ = self;
+        const stream = self.connection.stream;
+        var response_buf: [1024]u8 = undefined;
+        const response = if (extra) |ext|
+            try std.fmt.bufPrint(&response_buf, "{d} {s} {s}\r\n", .{ code, message, ext })
+        else
+            try std.fmt.bufPrint(&response_buf, "{d} {s}\r\n", .{ code, message });
 
-        if (extra) |ext| {
-            try writer.print("{d} {s} {s}\r\n", .{ code, message, ext });
-        } else {
-            try writer.print("{d} {s}\r\n", .{ code, message });
-        }
+        _ = try stream.write(response);
+        _ = writer;
     }
 
     fn saveMessage(self: *Session, data: []const u8) !void {
@@ -377,18 +410,23 @@ pub const Session = struct {
         const file = try cwd.createFile(filename, .{});
         defer file.close();
 
-        const file_writer = file.writer();
+        var header_buf: [256]u8 = undefined;
 
         // Write headers
-        try file_writer.print("From: {s}\r\n", .{self.mail_from orelse "unknown"});
+        const from_line = try std.fmt.bufPrint(&header_buf, "From: {s}\r\n", .{self.mail_from orelse "unknown"});
+        _ = try file.write(from_line);
+
         for (self.rcpt_to.items) |rcpt| {
-            try file_writer.print("To: {s}\r\n", .{rcpt});
+            const to_line = try std.fmt.bufPrint(&header_buf, "To: {s}\r\n", .{rcpt});
+            _ = try file.write(to_line);
         }
-        try file_writer.print("Date: {d}\r\n", .{timestamp});
-        try file_writer.writeAll("\r\n");
+
+        const date_line = try std.fmt.bufPrint(&header_buf, "Date: {d}\r\n", .{timestamp});
+        _ = try file.write(date_line);
+        _ = try file.write("\r\n");
 
         // Write message body
-        try file_writer.writeAll(data);
+        _ = try file.write(data);
 
         std.debug.print("Message saved to {s}\n", .{filename});
     }

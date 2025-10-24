@@ -64,14 +64,14 @@ pub const RateLimiter = struct {
 
     pub fn cleanup(self: *RateLimiter) void {
         const now = std.time.timestamp();
-        var to_remove = std.ArrayList([]const u8).init(self.allocator);
-        defer to_remove.deinit();
+        var to_remove = std.ArrayList([]const u8){};
+        defer to_remove.deinit(self.allocator);
 
         var it = self.ip_counters.iterator();
         while (it.next()) |entry| {
             const elapsed = now - entry.value_ptr.window_start;
             if (elapsed >= self.window_seconds * 2) {
-                to_remove.append(entry.key_ptr.*) catch continue;
+                to_remove.append(self.allocator, entry.key_ptr.*) catch continue;
             }
         }
 

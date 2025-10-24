@@ -7,16 +7,13 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const stdout_file = std.io.getStdOut();
-    const stdout = stdout_file.writer();
-
     // Load configuration
     const cfg = try config.loadConfig(allocator);
     defer cfg.deinit(allocator);
 
-    try stdout.print("Starting SMTP Server on {s}:{d}\n", .{ cfg.host, cfg.port });
-    try stdout.print("Max connections: {d}\n", .{cfg.max_connections});
-    try stdout.print("TLS enabled: {}\n", .{cfg.enable_tls});
+    std.debug.print("Starting SMTP Server on {s}:{d}\n", .{ cfg.host, cfg.port });
+    std.debug.print("Max connections: {d}\n", .{cfg.max_connections});
+    std.debug.print("TLS enabled: {}\n", .{cfg.enable_tls});
 
     // Create and start SMTP server
     var server = try smtp.Server.init(allocator, cfg);
