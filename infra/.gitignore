@@ -1,0 +1,35 @@
+# CDK
+*.js
+*.d.ts
+node_modules
+cdk.out
+cdk.context.json
+dist
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+coverage
+
+# Production
+.aws-sam
+
+# CDK Context
+.cdk.staging

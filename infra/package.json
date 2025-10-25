@@ -1,0 +1,61 @@
+{
+  "name": "smtp-server-infra",
+  "version": "1.0.0",
+  "description": "AWS CDK Infrastructure for SMTP Server",
+  "main": "lib/smtp-server-stack.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "test": "jest",
+    "cdk": "cdk",
+    "synth": "cdk synth",
+    "synth:dev": "cdk synth --context environment=dev",
+    "synth:staging": "cdk synth --context environment=staging",
+    "synth:prod": "cdk synth --context environment=production",
+    "diff": "cdk diff",
+    "diff:dev": "cdk diff --context environment=dev",
+    "diff:staging": "cdk diff --context environment=staging",
+    "diff:prod": "cdk diff --context environment=production",
+    "deploy": "cdk deploy",
+    "deploy:dev": "cdk deploy SmtpServerDevStack --context environment=dev --require-approval never",
+    "deploy:staging": "cdk deploy SmtpServerStagingStack --context environment=staging --require-approval never",
+    "deploy:prod": "cdk deploy SmtpServerProdStack --context environment=production",
+    "destroy": "cdk destroy",
+    "destroy:dev": "cdk destroy SmtpServerDevStack --context environment=dev",
+    "destroy:staging": "cdk destroy SmtpServerStagingStack --context environment=staging",
+    "destroy:prod": "cdk destroy SmtpServerProdStack --context environment=production",
+    "bootstrap": "cdk bootstrap",
+    "lint": "eslint . --ext .ts",
+    "format": "prettier --write \"**/*.ts\""
+  },
+  "keywords": [
+    "cdk",
+    "aws",
+    "smtp",
+    "mail-server",
+    "infrastructure"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "aws-cdk": "^2.100.0",
+    "eslint": "^8.0.0",
+    "jest": "^29.5.0",
+    "prettier": "^3.0.0",
+    "source-map-support": "^0.5.21",
+    "ts-jest": "^29.1.0",
+    "ts-node": "^10.9.0",
+    "typescript": "~5.2.0"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.100.0",
+    "constructs": "^10.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
