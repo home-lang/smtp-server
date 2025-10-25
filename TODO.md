@@ -90,7 +90,22 @@
   - Memory usage reporting (Linux)
   - HTTP 503 responses for unhealthy states
   - Comprehensive dependency status in JSON output
-- 🎉 **Major Milestone**: 7 complete phases (2,3,4,5,8,9 partial,10 partial) + 16 production-ready modules!
+- ✅ **JSON Structured Logging** (`src/core/logger.zig`)
+  - Full JSON logging implementation with LogFormat enum
+  - Profile-based configuration (production/staging use JSON by default)
+  - Environment variable override (SMTP_ENABLE_JSON_LOGGING)
+  - Structured logging with custom fields
+  - JSON escape handling for special characters
+  - Service name and hostname in JSON output
+- ✅ **API Documentation** (`docs/API_REFERENCE.md`)
+  - Complete REST API reference for all endpoints
+  - Health & Metrics API documentation (3 endpoints)
+  - Management API documentation (15+ endpoints)
+  - User management, queue, filters, search, config, logs
+  - Request/response examples with curl
+  - CSRF protection workflow
+  - Error handling and rate limiting
+- 🎉 **Major Milestone**: 8 complete phases (2,3,4,5,6 partial,7 partial,8,9,10 partial) + 18 production-ready modules!
 
 ### v0.27.0 (2025-10-24) - Code Quality Improvements & Input Validation 🛡️
 - ✅ **Email Validator**: Comprehensive RFC-compliant email address validator
@@ -1237,6 +1252,7 @@
 - [ ] **Deduplicate Imports**: Create common module imports in `src/root.zig`
 
 ### Phase 10: Documentation Improvements
+- [x] **API Reference Documentation**: Complete REST API documentation ✅ (`docs/API_REFERENCE.md` - Comprehensive reference for all endpoints with examples)
 - [ ] **OpenAPI Specification**: Add Swagger/OpenAPI docs for REST API
 - [x] **Database Schema Docs**: Document schema, migrations, maintenance in `docs/DATABASE.md` ✅ (Comprehensive guide with schema, migrations, maintenance, troubleshooting)
 - [ ] **Deployment Runbooks**: Create step-by-step operational procedures
@@ -1260,10 +1276,10 @@
 - [x] Fix rate limiter thread safety - Add mutex to cleanup (1 hour) ✅ (Already implemented)
 - [x] Remove legacy auth function - Delete unused `verifyCredentials()` (15 min) ✅ (Removed in Phase 1)
 - [x] Add health check details - Expand endpoint with dependencies (1 hour) ✅ (`src/api/health.zig:334-429` - Database, filesystem, and memory checks with response times)
-- [ ] Add API documentation - Document REST endpoints (2 hours)
+- [x] Add API documentation - Document REST endpoints (2 hours) ✅ (`docs/API_REFERENCE.md` - Complete REST API reference with 15+ endpoints)
 - [x] Fix MIME header validation - Add length checks (2 hours) ✅ (Implemented MAX_LINE_LENGTH validation)
 - [x] Add per-username rate limiting - Extend current limiter (1 hour) ✅ (Already implemented with checkAndIncrementUser)
-- [ ] Add JSON structured logging - Wrap current logging (2 hours)
+- [x] Add JSON structured logging - Wrap current logging (2 hours) ✅ (`src/core/logger.zig` with profile-based config, `src/core/config.zig:48,257,384-387`, `src/main.zig:55`)
 - [ ] Add fuzzing harnesses - For protocol parsing (2 hours)
 
 ## Future Ideas 💡

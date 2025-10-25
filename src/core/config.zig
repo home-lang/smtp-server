@@ -45,6 +45,7 @@ pub const Config = struct {
     enable_greylist: bool,
     enable_tracing: bool,
     tracing_service_name: []const u8,
+    enable_json_logging: bool,
 
     pub fn deinit(self: Config, allocator: std.mem.Allocator) void {
         allocator.free(self.tracing_service_name);
@@ -253,6 +254,7 @@ fn loadDefaultsFromProfile(allocator: std.mem.Allocator, profile: config_profile
         .enable_greylist = profile_config.enable_greylist,
         .enable_tracing = profile_config.enable_tracing,
         .tracing_service_name = try allocator.dupe(u8, "smtp-server"),
+        .enable_json_logging = profile_config.enable_json_logging,
     };
 }
 
@@ -377,6 +379,11 @@ fn applyEnvironmentVariables(allocator: std.mem.Allocator, cfg: *Config) !void {
     if (std.posix.getenv("SMTP_TRACING_SERVICE_NAME")) |value| {
         allocator.free(cfg.tracing_service_name);
         cfg.tracing_service_name = try allocator.dupe(u8, value);
+    }
+
+    // SMTP_ENABLE_JSON_LOGGING
+    if (std.posix.getenv("SMTP_ENABLE_JSON_LOGGING")) |value| {
+        cfg.enable_json_logging = std.ascii.eqlIgnoreCase(value, "true") or std.ascii.eqlIgnoreCase(value, "1");
     }
 }
 

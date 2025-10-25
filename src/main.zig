@@ -41,22 +41,23 @@ pub fn main() !void {
         return;
     }
 
-    // Initialize logger with CLI overrides
+    // Load configuration first (with CLI args and env vars)
+    // Configuration validation is automatically performed during loading
+    const cfg = config.loadConfig(allocator, cli_args) catch |err| {
+        std.debug.print("Configuration validation failed: {}\n", .{err});
+        return err;
+    };
+    defer cfg.deinit(allocator);
+
+    // Initialize logger with configuration settings
     const log_level = cli_args.log_level orelse .info;
     const log_file = cli_args.log_file orelse "smtp-server.log";
-    var log = try logger.Logger.init(allocator, log_level, log_file);
+    const log_format: logger.LogFormat = if (cfg.enable_json_logging) .json else .text;
+    var log = try logger.Logger.initWithFormat(allocator, log_level, log_file, log_format);
     defer log.deinit();
     logger.setGlobalLogger(&log);
 
     log.info("=== SMTP Server Starting ===", .{});
-
-    // Load configuration (with CLI args and env vars)
-    // Configuration validation is automatically performed during loading
-    const cfg = config.loadConfig(allocator, cli_args) catch |err| {
-        log.critical("Configuration validation failed: {}", .{err});
-        return err;
-    };
-    defer cfg.deinit(allocator);
 
     log.info("Configuration loaded and validated successfully:", .{});
     log.info("  Host: {s}:{d}", .{ cfg.host, cfg.port });
