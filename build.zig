@@ -147,6 +147,21 @@ pub fn build(b: *std.Build) void {
     search_cli.linkSystemLibrary("sqlite3");
     b.installArtifact(search_cli);
 
+    // Database Migration CLI tool
+    const migrate_cli_module = b.createModule(.{
+        .root_source_file = b.path("src/migrate_cli.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const migrate_cli = b.addExecutable(.{
+        .name = "migrate-cli",
+        .root_module = migrate_cli_module,
+    });
+    migrate_cli.linkLibC();
+    migrate_cli.linkSystemLibrary("sqlite3");
+    b.installArtifact(migrate_cli);
+
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
 

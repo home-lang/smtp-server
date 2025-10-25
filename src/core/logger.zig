@@ -148,43 +148,44 @@ pub const Logger = struct {
 };
 
 // Global logger instance (to be initialized in main)
-var global_logger: ?*Logger = null;
+// Using atomic value for thread-safe access
+var global_logger: std.atomic.Value(?*Logger) = std.atomic.Value(?*Logger).init(null);
 
 pub fn setGlobalLogger(logger: *Logger) void {
-    global_logger = logger;
+    global_logger.store(logger, .release);
 }
 
 pub fn getGlobalLogger() ?*Logger {
-    return global_logger;
+    return global_logger.load(.acquire);
 }
 
 // Convenience functions for global logging
 pub fn debug(comptime fmt: []const u8, args: anytype) void {
-    if (global_logger) |logger| {
+    if (getGlobalLogger()) |logger| {
         logger.debug(fmt, args);
     }
 }
 
 pub fn info(comptime fmt: []const u8, args: anytype) void {
-    if (global_logger) |logger| {
+    if (getGlobalLogger()) |logger| {
         logger.info(fmt, args);
     }
 }
 
 pub fn warn(comptime fmt: []const u8, args: anytype) void {
-    if (global_logger) |logger| {
+    if (getGlobalLogger()) |logger| {
         logger.warn(fmt, args);
     }
 }
 
 pub fn err(comptime fmt: []const u8, args: anytype) void {
-    if (global_logger) |logger| {
+    if (getGlobalLogger()) |logger| {
         logger.err(fmt, args);
     }
 }
 
 pub fn critical(comptime fmt: []const u8, args: anytype) void {
-    if (global_logger) |logger| {
+    if (getGlobalLogger()) |logger| {
         logger.critical(fmt, args);
     }
 }

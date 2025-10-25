@@ -22,6 +22,13 @@ pub const Statement = struct {
         _ = sqlite.sqlite3_finalize(self.stmt);
     }
 
+    pub fn reset(self: Statement) !void {
+        const rc = sqlite.sqlite3_reset(self.stmt);
+        if (rc != sqlite.SQLITE_OK) {
+            return DatabaseError.StepFailed;
+        }
+    }
+
     pub fn bind(self: Statement, index: usize, value: anytype) !void {
         const T = @TypeOf(value);
         const rc = switch (@typeInfo(T)) {

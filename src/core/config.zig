@@ -1,6 +1,22 @@
 const std = @import("std");
 const args = @import("args.zig");
 
+pub const ValidationError = error{
+    InvalidPort,
+    InvalidHost,
+    InvalidHostname,
+    InvalidMaxConnections,
+    InvalidMaxMessageSize,
+    InvalidMaxRecipients,
+    InvalidTimeout,
+    InvalidRateLimit,
+    InvalidTLSConfiguration,
+    InvalidWebhookConfiguration,
+    TLSCertificateNotFound,
+    TLSKeyNotFound,
+    InvalidHostnameFormat,
+};
+
 pub const Config = struct {
     host: []const u8,
     port: u16,
@@ -37,6 +53,142 @@ pub const Config = struct {
         if (self.tls_key_path) |path| allocator.free(path);
         if (self.webhook_url) |url| allocator.free(url);
     }
+
+    /// Validates the configuration and returns detailed error messages
+    pub fn validate(self: Config) ValidationError!void {
+        // Validate port range (1-65535)
+        if (self.port == 0) {
+            std.debug.print("Configuration Error: Port must be between 1 and 65535, got {d}\n", .{self.port});
+            return ValidationError.InvalidPort;
+        }
+
+        // Validate host is not empty
+        if (self.host.len == 0) {
+            std.debug.print("Configuration Error: Host cannot be empty\n", .{});
+            return ValidationError.InvalidHost;
+        }
+
+        // Validate hostname is not empty and has valid format
+        if (self.hostname.len == 0) {
+            std.debug.print("Configuration Error: Hostname cannot be empty\n", .{});
+            return ValidationError.InvalidHostname;
+        }
+
+        // Basic hostname format validation (no spaces, basic characters)
+        for (self.hostname) |c| {
+            if (c == ' ' or c == '\t' or c == '\r' or c == '\n') {
+                std.debug.print("Configuration Error: Hostname contains invalid whitespace characters\n", .{});
+                return ValidationError.InvalidHostnameFormat;
+            }
+        }
+
+        // Validate max_connections is reasonable (1-100000)
+        if (self.max_connections == 0 or self.max_connections > 100000) {
+            std.debug.print("Configuration Error: max_connections must be between 1 and 100000, got {d}\n", .{self.max_connections});
+            return ValidationError.InvalidMaxConnections;
+        }
+
+        // Validate max_message_size is reasonable (1KB - 100MB)
+        const min_message_size = 1024; // 1KB
+        const max_message_size = 100 * 1024 * 1024; // 100MB
+        if (self.max_message_size < min_message_size or self.max_message_size > max_message_size) {
+            std.debug.print("Configuration Error: max_message_size must be between {d} and {d}, got {d}\n", .{min_message_size, max_message_size, self.max_message_size});
+            return ValidationError.InvalidMaxMessageSize;
+        }
+
+        // Validate max_recipients is reasonable (1-10000)
+        if (self.max_recipients == 0 or self.max_recipients > 10000) {
+            std.debug.print("Configuration Error: max_recipients must be between 1 and 10000, got {d}\n", .{self.max_recipients});
+            return ValidationError.InvalidMaxRecipients;
+        }
+
+        // Validate timeout values (1 second - 1 hour)
+        const min_timeout: u32 = 1;
+        const max_timeout: u32 = 3600;
+
+        if (self.timeout_seconds < min_timeout or self.timeout_seconds > max_timeout) {
+            std.debug.print("Configuration Error: timeout_seconds must be between {d} and {d}, got {d}\n", .{min_timeout, max_timeout, self.timeout_seconds});
+            return ValidationError.InvalidTimeout;
+        }
+
+        if (self.data_timeout_seconds < min_timeout or self.data_timeout_seconds > max_timeout) {
+            std.debug.print("Configuration Error: data_timeout_seconds must be between {d} and {d}, got {d}\n", .{min_timeout, max_timeout, self.data_timeout_seconds});
+            return ValidationError.InvalidTimeout;
+        }
+
+        if (self.command_timeout_seconds < min_timeout or self.command_timeout_seconds > max_timeout) {
+            std.debug.print("Configuration Error: command_timeout_seconds must be between {d} and {d}, got {d}\n", .{min_timeout, max_timeout, self.command_timeout_seconds});
+            return ValidationError.InvalidTimeout;
+        }
+
+        if (self.greeting_timeout_seconds < min_timeout or self.greeting_timeout_seconds > max_timeout) {
+            std.debug.print("Configuration Error: greeting_timeout_seconds must be between {d} and {d}, got {d}\n", .{min_timeout, max_timeout, self.greeting_timeout_seconds});
+            return ValidationError.InvalidTimeout;
+        }
+
+        // Validate rate limits (1-1000000 per hour)
+        if (self.rate_limit_per_ip == 0 or self.rate_limit_per_ip > 1000000) {
+            std.debug.print("Configuration Error: rate_limit_per_ip must be between 1 and 1000000, got {d}\n", .{self.rate_limit_per_ip});
+            return ValidationError.InvalidRateLimit;
+        }
+
+        if (self.rate_limit_per_user == 0 or self.rate_limit_per_user > 1000000) {
+            std.debug.print("Configuration Error: rate_limit_per_user must be between 1 and 1000000, got {d}\n", .{self.rate_limit_per_user});
+            return ValidationError.InvalidRateLimit;
+        }
+
+        // Validate rate limit cleanup interval (60 seconds - 24 hours)
+        const min_cleanup_interval: u64 = 60;
+        const max_cleanup_interval: u64 = 86400;
+        if (self.rate_limit_cleanup_interval < min_cleanup_interval or self.rate_limit_cleanup_interval > max_cleanup_interval) {
+            std.debug.print("Configuration Error: rate_limit_cleanup_interval must be between {d} and {d}, got {d}\n", .{min_cleanup_interval, max_cleanup_interval, self.rate_limit_cleanup_interval});
+            return ValidationError.InvalidRateLimit;
+        }
+
+        // Validate TLS configuration
+        if (self.enable_tls) {
+            if (self.tls_cert_path == null) {
+                std.debug.print("Configuration Error: TLS is enabled but tls_cert_path is not set\n", .{});
+                return ValidationError.InvalidTLSConfiguration;
+            }
+            if (self.tls_key_path == null) {
+                std.debug.print("Configuration Error: TLS is enabled but tls_key_path is not set\n", .{});
+                return ValidationError.InvalidTLSConfiguration;
+            }
+
+            // Check if TLS certificate file exists
+            if (self.tls_cert_path) |cert_path| {
+                std.fs.cwd().access(cert_path, .{}) catch {
+                    std.debug.print("Configuration Error: TLS certificate file not found: {s}\n", .{cert_path});
+                    return ValidationError.TLSCertificateNotFound;
+                };
+            }
+
+            // Check if TLS key file exists
+            if (self.tls_key_path) |key_path| {
+                std.fs.cwd().access(key_path, .{}) catch {
+                    std.debug.print("Configuration Error: TLS key file not found: {s}\n", .{key_path});
+                    return ValidationError.TLSKeyNotFound;
+                };
+            }
+        }
+
+        // Validate webhook configuration
+        if (self.webhook_enabled) {
+            if (self.webhook_url == null or self.webhook_url.?.len == 0) {
+                std.debug.print("Configuration Error: Webhooks are enabled but webhook_url is not set\n", .{});
+                return ValidationError.InvalidWebhookConfiguration;
+            }
+
+            // Basic URL validation (must start with http:// or https://)
+            if (self.webhook_url) |url| {
+                if (!std.mem.startsWith(u8, url, "http://") and !std.mem.startsWith(u8, url, "https://")) {
+                    std.debug.print("Configuration Error: webhook_url must start with http:// or https://, got: {s}\n", .{url});
+                    return ValidationError.InvalidWebhookConfiguration;
+                }
+            }
+        }
+    }
 };
 
 pub fn loadConfig(allocator: std.mem.Allocator, cli_args: args.Args) !Config {
@@ -47,6 +199,9 @@ pub fn loadConfig(allocator: std.mem.Allocator, cli_args: args.Args) !Config {
 
     // Override with command-line arguments (highest priority)
     try applyCommandLineArgs(allocator, &cfg, cli_args);
+
+    // Validate the final configuration
+    try cfg.validate();
 
     return cfg;
 }

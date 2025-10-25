@@ -1,12 +1,14 @@
 const std = @import("std");
+const database = @import("../storage/database.zig");
 
-/// Greylisting implementation for spam prevention
+/// Greylisting implementation for spam prevention with database persistence
 /// Temporarily rejects mail from unknown sender/recipient/IP triplets
 /// Legitimate mail servers will retry, spam bots typically won't
 pub const Greylist = struct {
     allocator: std.mem.Allocator,
     entries: std.StringHashMap(GreylistEntry),
     mutex: std.Thread.Mutex,
+    db: ?*database.Database, // Optional database for persistence
 
     // Greylisting parameters
     initial_delay: i64 = 300, // 5 minutes - initial block period
@@ -25,7 +27,114 @@ pub const Greylist = struct {
             .allocator = allocator,
             .entries = std.StringHashMap(GreylistEntry).init(allocator),
             .mutex = .{},
+            .db = null,
         };
+    }
+
+    /// Initialize with database persistence
+    pub fn initWithDB(allocator: std.mem.Allocator, db: *database.Database) !Greylist {
+        var greylist = Greylist{
+            .allocator = allocator,
+            .entries = std.StringHashMap(GreylistEntry).init(allocator),
+            .mutex = .{},
+            .db = db,
+            .initial_delay = 300,
+            .retry_window = 14400,
+            .auto_whitelist_after = 36 * 86400,
+        };
+
+        // Initialize database schema
+        try greylist.initSchema();
+
+        // Load existing entries from database
+        try greylist.loadFromDB();
+
+        return greylist;
+    }
+
+    /// Initialize greylist database schema
+    fn initSchema(self: *Greylist) !void {
+        if (self.db) |db| {
+            const schema =
+                \\CREATE TABLE IF NOT EXISTS greylist (
+                \\    triplet_key TEXT PRIMARY KEY,
+                \\    first_seen INTEGER NOT NULL,
+                \\    last_seen INTEGER NOT NULL,
+                \\    allowed INTEGER NOT NULL,
+                \\    retry_count INTEGER NOT NULL DEFAULT 1
+                \\);
+                \\
+                \\CREATE INDEX IF NOT EXISTS idx_greylist_last_seen ON greylist(last_seen);
+                \\CREATE INDEX IF NOT EXISTS idx_greylist_allowed ON greylist(allowed);
+            ;
+
+            try db.exec(schema);
+        }
+    }
+
+    /// Load greylist entries from database
+    fn loadFromDB(self: *Greylist) !void {
+        if (self.db) |db| {
+            const query =
+                \\SELECT triplet_key, first_seen, last_seen, allowed, retry_count
+                \\FROM greylist
+                \\WHERE last_seen > ?1
+            ;
+
+            var stmt = try db.prepare(query);
+            defer stmt.finalize();
+
+            // Only load entries from last 7 days to avoid memory bloat
+            const cutoff = std.time.timestamp() - (7 * 86400);
+            try stmt.bind(1, cutoff);
+
+            while (try stmt.step()) {
+                const key = stmt.columnText(0);
+                const key_copy = try self.allocator.dupe(u8, key);
+
+                try self.entries.put(key_copy, .{
+                    .first_seen = stmt.columnInt64(1),
+                    .last_seen = stmt.columnInt64(2),
+                    .allowed = stmt.columnInt64(3) != 0,
+                    .retry_count = @intCast(stmt.columnInt64(4)),
+                });
+            }
+        }
+    }
+
+    /// Persist entry to database
+    fn persistEntry(self: *Greylist, key: []const u8, entry: GreylistEntry) !void {
+        if (self.db) |db| {
+            const sql =
+                \\INSERT OR REPLACE INTO greylist
+                \\(triplet_key, first_seen, last_seen, allowed, retry_count)
+                \\VALUES (?1, ?2, ?3, ?4, ?5)
+            ;
+
+            var stmt = try db.prepare(sql);
+            defer stmt.finalize();
+
+            try stmt.bind(1, key);
+            try stmt.bind(2, entry.first_seen);
+            try stmt.bind(3, entry.last_seen);
+            try stmt.bind(4, if (entry.allowed) @as(i64, 1) else @as(i64, 0));
+            try stmt.bind(5, @as(i64, @intCast(entry.retry_count)));
+
+            _ = try stmt.step();
+        }
+    }
+
+    /// Delete old entries from database
+    fn cleanupDB(self: *Greylist, cutoff_time: i64) !void {
+        if (self.db) |db| {
+            const sql = "DELETE FROM greylist WHERE last_seen < ?1";
+
+            var stmt = try db.prepare(sql);
+            defer stmt.finalize();
+
+            try stmt.bind(1, cutoff_time);
+            _ = try stmt.step();
+        }
     }
 
     pub fn deinit(self: *Greylist) void {
@@ -91,12 +200,17 @@ pub const Greylist = struct {
         } else {
             // New triplet - add to greylist and reject
             const stored_key = try self.allocator.dupe(u8, key);
-            try self.entries.put(stored_key, .{
+            const new_entry = GreylistEntry{
                 .first_seen = now,
                 .last_seen = now,
                 .allowed = false,
                 .retry_count = 1,
-            });
+            };
+            try self.entries.put(stored_key, new_entry);
+
+            // Persist to database
+            try self.persistEntry(key, new_entry);
+
             return false;
         }
     }
@@ -110,11 +224,15 @@ pub const Greylist = struct {
             updated.allowed = true;
         }
 
-        // Find the stored key
+        // Find the stored key and update
         var it = self.entries.iterator();
         while (it.next()) |kv| {
             if (std.mem.eql(u8, kv.key_ptr.*, key)) {
                 kv.value_ptr.* = updated;
+
+                // Persist to database
+                try self.persistEntry(key, updated);
+
                 return;
             }
         }
@@ -139,12 +257,15 @@ pub const Greylist = struct {
             }
         }
 
-        // Remove old entries
+        // Remove old entries from memory
         for (to_remove.items) |key| {
             if (self.entries.fetchRemove(key)) |removed| {
                 self.allocator.free(removed.key);
             }
         }
+
+        // Cleanup database
+        try self.cleanupDB(cutoff);
     }
 
     /// Get statistics about the greylist

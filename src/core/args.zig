@@ -12,6 +12,7 @@ pub const Args = struct {
     enable_auth: ?bool = null,
     help: bool = false,
     version: bool = false,
+    validate_only: bool = false,
 
     pub fn deinit(self: *Args, allocator: std.mem.Allocator) void {
         if (self.config_file) |path| allocator.free(path);
@@ -90,6 +91,8 @@ pub fn parseArgs(allocator: std.mem.Allocator) !Args {
             args.enable_auth = true;
         } else if (std.mem.eql(u8, arg, "--disable-auth")) {
             args.enable_auth = false;
+        } else if (std.mem.eql(u8, arg, "--validate-only")) {
+            args.validate_only = true;
         } else {
             std.debug.print("Unknown argument: {s}\n", .{arg});
             std.debug.print("Use --help for usage information\n", .{});
@@ -129,6 +132,7 @@ pub fn printHelp() void {
         \\    --disable-tls           Disable TLS/STARTTLS support
         \\    --enable-auth           Enable SMTP authentication
         \\    --disable-auth          Disable SMTP authentication
+        \\    --validate-only         Validate configuration and exit without starting server
         \\
         \\EXAMPLES:
         \\    # Start server on custom port
@@ -142,6 +146,9 @@ pub fn printHelp() void {
         \\
         \\    # Limit connections
         \\    smtp-server --max-connections 50
+        \\
+        \\    # Validate configuration without starting server
+        \\    smtp-server --validate-only
         \\
     ;
     std.debug.print("{s}\n", .{help_text});

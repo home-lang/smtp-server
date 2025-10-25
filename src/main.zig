@@ -51,15 +51,26 @@ pub fn main() !void {
     log.info("=== SMTP Server Starting ===", .{});
 
     // Load configuration (with CLI args and env vars)
-    const cfg = try config.loadConfig(allocator, cli_args);
+    // Configuration validation is automatically performed during loading
+    const cfg = config.loadConfig(allocator, cli_args) catch |err| {
+        log.critical("Configuration validation failed: {}", .{err});
+        return err;
+    };
     defer cfg.deinit(allocator);
 
-    log.info("Configuration loaded:", .{});
+    log.info("Configuration loaded and validated successfully:", .{});
     log.info("  Host: {s}:{d}", .{ cfg.host, cfg.port });
     log.info("  Max connections: {d}", .{cfg.max_connections});
     log.info("  TLS enabled: {}", .{cfg.enable_tls});
     log.info("  Auth enabled: {}", .{cfg.enable_auth});
     log.info("  Max message size: {d} bytes", .{cfg.max_message_size});
+
+    // Handle --validate-only flag
+    if (cli_args.validate_only) {
+        std.debug.print("\n✓ Configuration validation successful!\n", .{});
+        std.debug.print("All configuration values are within acceptable ranges.\n", .{});
+        return;
+    }
 
     // Setup signal handlers for graceful shutdown
     const empty_set = std.posix.sigemptyset();

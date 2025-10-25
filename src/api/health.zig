@@ -104,7 +104,15 @@ pub const HealthStatus = enum {
     }
 };
 
-/// Health check result
+/// Dependency status
+pub const DependencyStatus = struct {
+    name: []const u8,
+    healthy: bool,
+    response_time_ms: ?f64,
+    error_message: ?[]const u8,
+};
+
+/// Health check result with dependency monitoring
 pub const HealthCheck = struct {
     status: HealthStatus,
     uptime_seconds: i64,
@@ -112,6 +120,7 @@ pub const HealthCheck = struct {
     max_connections: usize,
     memory_usage_mb: ?f64,
     checks: std.StringHashMap(bool),
+    dependencies: std.ArrayList(DependencyStatus),
     allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator) HealthCheck {
@@ -122,6 +131,7 @@ pub const HealthCheck = struct {
             .max_connections = 0,
             .memory_usage_mb = null,
             .checks = std.StringHashMap(bool).init(allocator),
+            .dependencies = std.ArrayList(DependencyStatus).init(allocator),
             .allocator = allocator,
         };
     }
@@ -132,6 +142,32 @@ pub const HealthCheck = struct {
             self.allocator.free(entry.key_ptr.*);
         }
         self.checks.deinit();
+
+        for (self.dependencies.items) |dep| {
+            if (dep.error_message) |err| {
+                self.allocator.free(err);
+            }
+        }
+        self.dependencies.deinit();
+    }
+
+    /// Add dependency status
+    pub fn addDependency(self: *HealthCheck, name: []const u8, healthy: bool, response_time_ms: ?f64, error_message: ?[]const u8) !void {
+        const error_copy = if (error_message) |err| try self.allocator.dupe(u8, err) else null;
+
+        try self.dependencies.append(.{
+            .name = name,
+            .healthy = healthy,
+            .response_time_ms = response_time_ms,
+            .error_message = error_copy,
+        });
+
+        // Update overall health status based on dependencies
+        if (!healthy) {
+            if (self.status == .healthy) {
+                self.status = .degraded;
+            }
+        }
     }
 
     pub fn toJson(self: *HealthCheck) ![]const u8 {
@@ -163,7 +199,46 @@ pub const HealthCheck = struct {
             try buf.appendSlice("\":");
             try buf.appendSlice(if (entry.value_ptr.*) "true" else "false");
         }
-        try buf.appendSlice("}}");
+        try buf.appendSlice("}");
+
+        // Add dependencies
+        if (self.dependencies.items.len > 0) {
+            try buf.appendSlice(",\"dependencies\":[");
+            for (self.dependencies.items, 0..) |dep, i| {
+                if (i > 0) try buf.appendSlice(",");
+                try buf.appendSlice("{\"name\":\"");
+                try buf.appendSlice(dep.name);
+                try buf.appendSlice("\",\"healthy\":");
+                try buf.appendSlice(if (dep.healthy) "true" else "false");
+
+                if (dep.response_time_ms) |rt| {
+                    try buf.appendSlice(",\"response_time_ms\":");
+                    try std.fmt.format(buf.writer(), "{d:.2}", .{rt});
+                }
+
+                if (dep.error_message) |err| {
+                    try buf.appendSlice(",\"error\":\"");
+                    // Escape JSON special characters
+                    for (err) |c| {
+                        if (c == '"') {
+                            try buf.appendSlice("\\\"");
+                        } else if (c == '\\') {
+                            try buf.appendSlice("\\\\");
+                        } else if (c == '\n') {
+                            try buf.appendSlice("\\n");
+                        } else {
+                            try buf.append(c);
+                        }
+                    }
+                    try buf.appendSlice("\"");
+                }
+
+                try buf.appendSlice("}");
+            }
+            try buf.appendSlice("]");
+        }
+
+        try buf.appendSlice("}");
 
         return try buf.toOwnedSlice();
     }
