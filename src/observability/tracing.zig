@@ -81,8 +81,12 @@ pub const TraceContext = struct {
         var trace_id_hex: [32]u8 = undefined;
         var span_id_hex: [16]u8 = undefined;
 
-        _ = std.fmt.bufPrint(&trace_id_hex, "{x}", .{std.fmt.fmtSliceHexLower(&self.trace_id)}) catch unreachable;
-        _ = std.fmt.bufPrint(&span_id_hex, "{x}", .{std.fmt.fmtSliceHexLower(&self.span_id)}) catch unreachable;
+        _ = std.fmt.bufPrint(&trace_id_hex, "{x}", .{std.fmt.fmtSliceHexLower(&self.trace_id)}) catch |err| {
+            std.debug.panic("Failed to format trace ID: {}", .{err});
+        };
+        _ = std.fmt.bufPrint(&span_id_hex, "{x}", .{std.fmt.fmtSliceHexLower(&self.span_id)}) catch |err| {
+            std.debug.panic("Failed to format span ID: {}", .{err});
+        };
 
         return try std.fmt.allocPrint(
             allocator,
@@ -232,8 +236,8 @@ pub const Span = struct {
 
     /// Get duration in microseconds
     pub fn durationMicros(self: *const Span) i64 {
-        const end = self.end_time orelse std.time.nanoTimestamp();
-        return @divFloor(end - self.start_time, 1000);
+        const end_time = self.end_time orelse std.time.nanoTimestamp();
+        return @divFloor(end_time - self.start_time, 1000);
     }
 
     /// Get duration in milliseconds
@@ -291,7 +295,7 @@ pub const ConsoleExporter = struct {
         return .{ .allocator = allocator };
     }
 
-    pub fn export(self: *ConsoleExporter, span: *const Span) !void {
+    pub fn exportSpan(self: *ConsoleExporter, span: *const Span) !void {
         const trace_id = try span.context.traceIdHex(self.allocator);
         defer self.allocator.free(trace_id);
 
@@ -325,7 +329,7 @@ test "trace context creation" {
     const testing = std.testing;
     const allocator = testing.allocator;
 
-    var ctx = try TraceContext.init(allocator);
+    const ctx = try TraceContext.init(allocator);
     try testing.expect(ctx.trace_id.len == 16);
     try testing.expect(ctx.span_id.len == 8);
     try testing.expectEqual(@as(u8, 0x01), ctx.trace_flags);

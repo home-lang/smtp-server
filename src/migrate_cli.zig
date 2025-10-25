@@ -134,7 +134,9 @@ fn formatTimestamp(timestamp: i64) [19]u8 {
         hours,
         minutes,
         seconds,
-    }) catch unreachable;
+    }) catch |err| {
+        std.debug.panic("Failed to format timestamp: {}", .{err});
+    };
 
     return buf;
 }

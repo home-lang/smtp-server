@@ -166,7 +166,7 @@ pub const Session = struct {
                 4 => self.allocator.rawFree(@as([*]align(4) u8, @ptrCast(@alignCast(ptr_bytes)))[0..info.size], log2_align, @returnAddress()),
                 8 => self.allocator.rawFree(@as([*]align(8) u8, @ptrCast(@alignCast(ptr_bytes)))[0..info.size], log2_align, @returnAddress()),
                 16 => self.allocator.rawFree(@as([*]align(16) u8, @ptrCast(@alignCast(ptr_bytes)))[0..info.size], log2_align, @returnAddress()),
-                else => unreachable,
+                else => std.debug.panic("Unsupported TLS reader alignment: {}", .{info.alignment}),
             }
         }
         if (self.tls_writer_info) |info| {
@@ -178,7 +178,7 @@ pub const Session = struct {
                 4 => self.allocator.rawFree(@as([*]align(4) u8, @ptrCast(@alignCast(ptr_bytes)))[0..info.size], log2_align, @returnAddress()),
                 8 => self.allocator.rawFree(@as([*]align(8) u8, @ptrCast(@alignCast(ptr_bytes)))[0..info.size], log2_align, @returnAddress()),
                 16 => self.allocator.rawFree(@as([*]align(16) u8, @ptrCast(@alignCast(ptr_bytes)))[0..info.size], log2_align, @returnAddress()),
-                else => unreachable,
+                else => std.debug.panic("Unsupported TLS writer alignment: {}", .{info.alignment}),
             }
         }
         // Clean up TLS buffers
