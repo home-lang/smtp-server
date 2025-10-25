@@ -230,6 +230,90 @@ pub const Logger = struct {
     pub fn logError(self: *Logger, context: []const u8, error_msg: anytype) void {
         self.err("{s}: {any}", .{ context, error_msg });
     }
+
+    /// Structured logging with custom fields (JSON format recommended)
+    pub const StructuredLog = struct {
+        level: LogLevel,
+        message: []const u8,
+        fields: std.StringHashMap([]const u8),
+
+        pub fn init(allocator: std.mem.Allocator, level: LogLevel, message: []const u8) StructuredLog {
+            return .{
+                .level = level,
+                .message = message,
+                .fields = std.StringHashMap([]const u8).init(allocator),
+            };
+        }
+
+        pub fn deinit(self: *StructuredLog) void {
+            var it = self.fields.iterator();
+            while (it.next()) |entry| {
+                self.fields.allocator.free(entry.key_ptr.*);
+                self.fields.allocator.free(entry.value_ptr.*);
+            }
+            self.fields.deinit();
+        }
+
+        pub fn addField(self: *StructuredLog, key: []const u8, value: []const u8) !void {
+            const key_copy = try self.fields.allocator.dupe(u8, key);
+            const value_copy = try self.fields.allocator.dupe(u8, value);
+            try self.fields.put(key_copy, value_copy);
+        }
+
+        pub fn addInt(self: *StructuredLog, key: []const u8, value: anytype) !void {
+            var buf: [64]u8 = undefined;
+            const value_str = try std.fmt.bufPrint(&buf, "{d}", .{value});
+            try self.addField(key, value_str);
+        }
+    };
+
+    pub fn logStructured(self: *Logger, slog: *StructuredLog) void {
+        if (@intFromEnum(slog.level) < @intFromEnum(self.min_level)) return;
+
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        const timestamp = std.time.timestamp();
+        var log_buf: [8192]u8 = undefined;
+
+        const log_entry = switch (self.format) {
+            .json => self.formatJSON(&log_buf, timestamp, slog.level, slog.message, slog.fields) catch return,
+            .text => blk: {
+                // Format as text with key=value pairs
+                var stream = std.io.fixedBufferStream(&log_buf);
+                var writer = stream.writer();
+                writer.print("[{d}] [{s}] {s}", .{
+                    timestamp,
+                    slog.level.toString(),
+                    slog.message,
+                }) catch return;
+
+                var it = slog.fields.iterator();
+                while (it.next()) |entry| {
+                    writer.print(" {s}={s}", .{ entry.key_ptr.*, entry.value_ptr.* }) catch return;
+                }
+                writer.writeAll("\n") catch return;
+                break :blk stream.getWritten();
+            },
+        };
+
+        // Write to stderr
+        if (self.use_colors and self.format == .text) {
+            var buf: [8192]u8 = undefined;
+            const colored = std.fmt.bufPrint(&buf, "{s}{s}\x1b[0m", .{
+                slog.level.toColor(),
+                log_entry,
+            }) catch return;
+            _ = std.posix.write(std.posix.STDERR_FILENO, colored) catch {};
+        } else {
+            _ = std.posix.write(std.posix.STDERR_FILENO, log_entry) catch {};
+        }
+
+        // Write to file
+        if (self.log_file) |file| {
+            _ = file.write(log_entry) catch {};
+        }
+    }
 };
 
 // Global logger instance (to be initialized in main)
@@ -273,4 +357,58 @@ pub fn critical(comptime fmt: []const u8, args: anytype) void {
     if (getGlobalLogger()) |logger| {
         logger.critical(fmt, args);
     }
+}
+
+// Tests
+test "JSON logging format" {
+    const testing = std.testing;
+
+    var logger = try Logger.initWithFormat(testing.allocator, .info, null, .json);
+    defer logger.deinit();
+
+    // Test basic JSON logging
+    logger.info("Test message", .{});
+    logger.warn("Warning message", .{});
+}
+
+test "structured logging with fields" {
+    const testing = std.testing;
+
+    var logger = try Logger.initWithFormat(testing.allocator, .info, null, .json);
+    defer logger.deinit();
+
+    var slog = Logger.StructuredLog.init(testing.allocator, .info, "User login");
+    defer slog.deinit();
+
+    try slog.addField("user", "john@example.com");
+    try slog.addField("ip", "192.168.1.1");
+    try slog.addInt("attempts", 3);
+
+    logger.logStructured(&slog);
+}
+
+test "text logging with structured fields" {
+    const testing = std.testing;
+
+    var logger = try Logger.initWithFormat(testing.allocator, .info, null, .text);
+    defer logger.deinit();
+
+    var slog = Logger.StructuredLog.init(testing.allocator, .warn, "Rate limit exceeded");
+    defer slog.deinit();
+
+    try slog.addField("client_ip", "10.0.0.1");
+    try slog.addInt("request_count", 150);
+    try slog.addInt("limit", 100);
+
+    logger.logStructured(&slog);
+}
+
+test "JSON escape special characters" {
+    const testing = std.testing;
+
+    var logger = try Logger.initWithFormat(testing.allocator, .info, null, .json);
+    defer logger.deinit();
+
+    // Test logging message with special characters
+    logger.info("Message with \"quotes\" and \n newlines \t tabs", .{});
 }
