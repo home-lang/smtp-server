@@ -327,21 +327,105 @@ pub const HealthServer = struct {
             health.status = .healthy;
         }
 
-        // Add checks
+        // Add basic checks
         try health.checks.put(try self.allocator.dupe(u8, "smtp_server"), health.status == .healthy);
         try health.checks.put(try self.allocator.dupe(u8, "connections_available"), connection_ratio < 1.0);
+
+        // Check database dependency (if DB_PATH is set, database is in use)
+        const db_start = std.time.milliTimestamp();
+        if (std.posix.getenv("SMTP_DB_PATH")) |db_path| {
+            // Try to access database file
+            std.fs.cwd().access(db_path, .{}) catch |err| {
+                const err_msg = try std.fmt.allocPrint(self.allocator, "Database file not accessible: {}", .{err});
+                try health.addDependency("database", false, null, err_msg);
+                try health.checks.put(try self.allocator.dupe(u8, "database"), false);
+                health.status = .unhealthy;
+                const json = try health.toJson();
+                defer self.allocator.free(json);
+                const response = try std.fmt.allocPrint(
+                    self.allocator,
+                    "HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nContent-Length: {d}\r\n\r\n{s}",
+                    .{ json.len, json },
+                );
+                defer self.allocator.free(response);
+                _ = try stream.write(response);
+                return;
+            };
+            const db_time = @as(f64, @floatFromInt(std.time.milliTimestamp() - db_start));
+            try health.addDependency("database", true, db_time, null);
+            try health.checks.put(try self.allocator.dupe(u8, "database"), true);
+        }
+
+        // Check filesystem dependency (can write to temp)
+        const fs_start = std.time.milliTimestamp();
+        const tmp_file = "/tmp/smtp_health_check";
+        var file = std.fs.cwd().createFile(tmp_file, .{}) catch |err| {
+            const err_msg = try std.fmt.allocPrint(self.allocator, "Filesystem not writable: {}", .{err});
+            try health.addDependency("filesystem", false, null, err_msg);
+            try health.checks.put(try self.allocator.dupe(u8, "filesystem"), false);
+            health.status = .degraded;
+            const json = try health.toJson();
+            defer self.allocator.free(json);
+            const response = try std.fmt.allocPrint(
+                self.allocator,
+                "HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nContent-Length: {d}\r\n\r\n{s}",
+                .{ json.len, json },
+            );
+            defer self.allocator.free(response);
+            _ = try stream.write(response);
+            return;
+        };
+        file.close();
+        std.fs.cwd().deleteFile(tmp_file) catch {};
+        const fs_time = @as(f64, @floatFromInt(std.time.milliTimestamp() - fs_start));
+        try health.addDependency("filesystem", true, fs_time, null);
+        try health.checks.put(try self.allocator.dupe(u8, "filesystem"), true);
+
+        // Get memory usage estimate
+        health.memory_usage_mb = self.getMemoryUsageMB();
 
         const json = try health.toJson();
         defer self.allocator.free(json);
 
+        const status_code = if (health.status == .healthy) "200 OK" else if (health.status == .degraded) "200 OK" else "503 Service Unavailable";
         const response = try std.fmt.allocPrint(
             self.allocator,
-            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {d}\r\n\r\n{s}",
-            .{ json.len, json },
+            "HTTP/1.1 {s}\r\nContent-Type: application/json\r\nContent-Length: {d}\r\n\r\n{s}",
+            .{ status_code, json.len, json },
         );
         defer self.allocator.free(response);
 
         _ = try stream.write(response);
+    }
+
+    /// Get approximate memory usage in MB (Linux/macOS)
+    fn getMemoryUsageMB(self: *HealthServer) ?f64 {
+        _ = self;
+        // On macOS, read from /proc/self/status is not available
+        // This is a simplified version - in production you'd use platform-specific APIs
+        if (std.fs.openFileAbsolute("/proc/self/status", .{})) |file| {
+            defer file.close();
+            var buf: [4096]u8 = undefined;
+            const bytes_read = file.read(&buf) catch return null;
+            const content = buf[0..bytes_read];
+
+            // Parse VmRSS (Resident Set Size)
+            var lines = std.mem.split(u8, content, "\n");
+            while (lines.next()) |line| {
+                if (std.mem.startsWith(u8, line, "VmRSS:")) {
+                    // VmRSS: 12345 kB
+                    var parts = std.mem.split(u8, line, " ");
+                    _ = parts.next(); // Skip "VmRSS:"
+                    while (parts.next()) |part| {
+                        if (part.len == 0) continue;
+                        if (std.fmt.parseInt(u64, part, 10)) |kb| {
+                            return @as(f64, @floatFromInt(kb)) / 1024.0;
+                        } else |_| {}
+                    }
+                }
+            }
+        } else |_| {}
+        return null;
     }
 
     fn handleStats(self: *HealthServer, stream: std.net.Stream) !void {

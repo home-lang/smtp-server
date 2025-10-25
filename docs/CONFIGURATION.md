@@ -1,20 +1,110 @@
 # Configuration Guide
 
-**Version:** v0.21.0
+**Version:** v0.28.0
 **Date:** 2025-10-24
 
 ## Overview
 
 The SMTP server supports configuration through multiple methods:
-1. **Environment Variables** (highest priority)
-2. **Command-line Arguments**
-3. **Default Values** (lowest priority)
+1. **Configuration Profiles** (development, testing, staging, production)
+2. **Environment Variables** (highest priority overrides)
+3. **Command-line Arguments**
+4. **Default Values** (lowest priority)
 
 ## Configuration Priority
 
 ```
-Environment Variables > Command-line Args > Defaults
+Environment Variables > Command-line Args > Profile Defaults > System Defaults
 ```
+
+## Configuration Profiles
+
+The server includes built-in configuration profiles optimized for different environments. Profiles provide sensible defaults for development, testing, staging, and production use cases.
+
+### Available Profiles
+
+- **development** - Relaxed limits, verbose logging, quick iteration
+- **testing** - Minimal resources, fast failures, deterministic behavior
+- **staging** - Production-like settings for pre-production testing
+- **production** - Optimized for throughput, security, and reliability
+
+### Using Profiles
+
+Set the `SMTP_PROFILE` environment variable to activate a profile:
+
+```bash
+# Development mode
+SMTP_PROFILE=development ./smtp-server
+
+# Production mode
+SMTP_PROFILE=production ./smtp-server
+
+# Testing mode (used by test suite)
+SMTP_PROFILE=testing ./smtp-server
+```
+
+You can also use short aliases: `dev`, `test`, `stage`, `prod`
+
+### Profile Configuration Details
+
+See `src/core/config_profiles.zig` for complete profile definitions.
+
+#### Development Profile
+- SMTP Port: 2525 (non-privileged)
+- Max Connections: 100
+- Log Level: debug
+- TLS: Optional
+- Auth: Optional
+- Features: Spam filter enabled, virus scan disabled, greylist disabled
+- Purpose: Fast iteration, verbose debugging
+
+#### Testing Profile
+- SMTP Port: 0 (random)
+- Max Connections: 10
+- Log Level: warn (minimal noise)
+- TLS: Disabled
+- Auth: Disabled
+- Features: All filters disabled for deterministic tests
+- Purpose: Fast, isolated unit/integration tests
+
+#### Staging Profile
+- SMTP Port: 25
+- Max Connections: 500
+- Log Level: info
+- TLS: Required
+- Auth: Required
+- Features: All security features enabled
+- Purpose: Pre-production validation
+
+#### Production Profile
+- SMTP Port: 25
+- Max Connections: 2000
+- Log Level: info
+- TLS: Required (TLS 1.3 minimum)
+- Auth: Required
+- Features: All security features enabled, io_uring enabled (Linux)
+- Purpose: Maximum throughput and security
+
+### Validation Mode
+
+Validate your configuration without starting the server:
+
+```bash
+./smtp-server --validate-only
+
+# With custom profile
+SMTP_PROFILE=production ./smtp-server --validate-only
+
+# With environment overrides
+SMTP_PROFILE=production SMTP_MAX_CONNECTIONS=5000 ./smtp-server --validate-only
+```
+
+This checks:
+- All configuration values are within valid ranges
+- Required files/paths exist
+- Port numbers are valid
+- Timeout values are reasonable
+- Profile is valid
 
 ## Quick Start
 
@@ -769,14 +859,139 @@ echo $SMTP_PORT
 
 ---
 
+## Complete Configuration Reference
+
+### Profile Comparison Table
+
+| Setting | Development | Testing | Staging | Production | Type | Description |
+|---------|------------|---------|---------|------------|------|-------------|
+| **Server** |
+| `smtp_port` | 2525 | 0 (random) | 25 | 25 | u16 | SMTP server port |
+| `api_port` | 8081 | 0 (random) | 8080 | 8080 | u16 | API server port |
+| `max_connections` | 100 | 10 | 500 | 2000 | u32 | Max concurrent connections |
+| `connection_timeout_seconds` | 300 | 5 | 300 | 300 | u32 | Connection timeout |
+| `command_timeout_seconds` | 60 | 2 | 60 | 60 | u32 | Command timeout |
+| **Rate Limiting** |
+| `rate_limit_window_seconds` | 60 | 60 | 60 | 60 | u32 | Rate limit window |
+| `rate_limit_max_requests` | 1000 | 10000 | 500 | 200 | u32 | Max requests per window |
+| `rate_limit_max_per_user` | 500 | 10000 | 200 | 100 | u32 | Max per authenticated user |
+| **Message Limits** |
+| `max_message_size` | 10 MB | 1 MB | 25 MB | 25 MB | usize | Maximum message size |
+| `max_recipients` | 100 | 10 | 100 | 100 | u32 | Max recipients per message |
+| **Storage** |
+| `queue_batch_size` | 10 | 5 | 50 | 100 | usize | Queue batch size |
+| `queue_flush_interval_ms` | 1000 | 100 | 2000 | 5000 | u64 | Queue flush interval |
+| `database_pool_size` | 5 | 2 | 10 | 20 | u32 | Database connection pool |
+| **Logging** |
+| `log_level` | debug | warn | info | info | enum | Logging level |
+| `enable_json_logging` | false | false | true | true | bool | JSON structured logs |
+| `log_file_path` | null | null | /var/log/smtp | /var/log/smtp | ?[]u8 | Log file path |
+| **Security** |
+| `require_tls` | false | false | true | true | bool | Require TLS encryption |
+| `require_auth` | false | false | true | true | bool | Require authentication |
+| `tls_min_version` | 1.2 | 1.2 | 1.2 | 1.3 | string | Minimum TLS version |
+| **Performance** |
+| `buffer_pool_size` | 50 | 10 | 200 | 500 | u32 | Buffer pool size |
+| `enable_io_uring` | false | false | false | true | bool | Enable io_uring (Linux) |
+| `worker_threads` | 2 | 1 | 4 | 8 | u32 | Worker thread count |
+| **Features** |
+| `enable_spam_filter` | true | false | true | true | bool | Enable spam filtering |
+| `enable_virus_scan` | false | false | true | true | bool | Enable virus scanning |
+| `enable_greylist` | false | false | true | true | bool | Enable greylisting |
+| `enable_webhooks` | true | false | true | true | bool | Enable webhook notifications |
+| `enable_metrics` | true | false | true | true | bool | Enable metrics collection |
+| `enable_tracing` | true | false | true | true | bool | Enable distributed tracing |
+| **Resilience** |
+| `circuit_breaker_threshold` | 10 | 3 | 5 | 10 | u32 | Circuit breaker threshold |
+| `circuit_breaker_timeout_seconds` | 10 | 1 | 30 | 60 | u32 | Circuit breaker timeout |
+| `max_retry_attempts` | 2 | 1 | 3 | 5 | u32 | Max retry attempts |
+| `retry_delay_seconds` | 1 | 0 | 5 | 10 | u32 | Delay between retries |
+
+### Environment Variable Override Reference
+
+All profile settings can be overridden via environment variables. Use the `SMTP_` prefix with UPPER_SNAKE_CASE:
+
+```bash
+# Override any profile setting
+SMTP_PROFILE=production \
+SMTP_MAX_CONNECTIONS=5000 \
+SMTP_WORKER_THREADS=16 \
+SMTP_LOG_LEVEL=debug \
+./smtp-server
+```
+
+**Common Environment Variables:**
+
+| Environment Variable | Profile Setting | Example |
+|---------------------|-----------------|---------|
+| `SMTP_PROFILE` | Profile selection | `production`, `dev`, `test` |
+| `SMTP_PORT` | `smtp_port` | `2525`, `25`, `587` |
+| `SMTP_HOST` | Server bind address | `0.0.0.0`, `127.0.0.1` |
+| `SMTP_MAX_CONNECTIONS` | `max_connections` | `1000`, `2000` |
+| `SMTP_LOG_LEVEL` | `log_level` | `debug`, `info`, `warn`, `error` |
+| `SMTP_DB_PATH` | Database file path | `/var/lib/smtp/smtp.db` |
+| `SMTP_ENABLE_TLS` | `require_tls` | `true`, `false` |
+| `SMTP_ENABLE_AUTH` | `require_auth` | `true`, `false` |
+| `SMTP_WORKER_THREADS` | `worker_threads` | `4`, `8`, `16` |
+| `SMTP_MAX_MESSAGE_SIZE` | `max_message_size` | `10485760` (10MB) |
+| `SMTP_ENABLE_GREYLIST` | `enable_greylist` | `true`, `false` |
+| `SMTP_WEBHOOK_URL` | Webhook endpoint | `https://api.example.com/hook` |
+
+### Tuning Recommendations
+
+#### Small Deployment (< 1000 messages/hour)
+```bash
+SMTP_PROFILE=development \
+SMTP_MAX_CONNECTIONS=100 \
+SMTP_WORKER_THREADS=2 \
+SMTP_DATABASE_POOL_SIZE=5
+```
+
+#### Medium Deployment (1000-10000 messages/hour)
+```bash
+SMTP_PROFILE=staging \
+SMTP_MAX_CONNECTIONS=500 \
+SMTP_WORKER_THREADS=4 \
+SMTP_DATABASE_POOL_SIZE=10 \
+SMTP_BUFFER_POOL_SIZE=200
+```
+
+#### Large Deployment (> 10000 messages/hour)
+```bash
+SMTP_PROFILE=production \
+SMTP_MAX_CONNECTIONS=2000 \
+SMTP_WORKER_THREADS=16 \
+SMTP_DATABASE_POOL_SIZE=30 \
+SMTP_BUFFER_POOL_SIZE=1000 \
+SMTP_ENABLE_IO_URING=true
+```
+
+#### High Security (Banking, Healthcare)
+```bash
+SMTP_PROFILE=production \
+SMTP_REQUIRE_TLS=true \
+SMTP_REQUIRE_AUTH=true \
+SMTP_TLS_MIN_VERSION=1.3 \
+SMTP_ENABLE_SPAM_FILTER=true \
+SMTP_ENABLE_VIRUS_SCAN=true \
+SMTP_ENABLE_GREYLIST=true \
+SMTP_RATE_LIMIT_MAX_REQUESTS=50 \
+SMTP_MAX_MESSAGE_SIZE=5242880  # 5MB limit
+```
+
+---
+
 ## See Also
 
-- [TLS Proxy Setup](./TLS_PROXY_SETUP.md)
-- [Thread Safety Audit](./THREAD_SAFETY_AUDIT.md)
-- [Known Issues](./KNOWN_ISSUES_AND_SOLUTIONS.md)
-- [Deployment Guide](./DEPLOYMENT.md)
+- [Configuration Profiles Source](../src/core/config_profiles.zig) - Complete profile definitions
+- [TLS Proxy Setup](./TLS_PROXY_SETUP.md) - TLS termination proxy configuration
+- [Thread Safety Audit](./THREAD_SAFETY_AUDIT.md) - Concurrency safety documentation
+- [Database Schema](./DATABASE.md) - Database configuration and maintenance
+- [Troubleshooting Guide](./TROUBLESHOOTING.md) - Configuration troubleshooting
+- [Known Issues](./KNOWN_ISSUES_AND_SOLUTIONS.md) - Known configuration issues
+- [Deployment Guide](./DEPLOYMENT.md) - Production deployment patterns
 
 ---
 
 **Last Updated:** 2025-10-24
-**Version:** v0.21.0
+**Version:** v0.28.0

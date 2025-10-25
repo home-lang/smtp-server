@@ -1,5 +1,6 @@
 const std = @import("std");
 const args = @import("args.zig");
+const config_profiles = @import("config_profiles.zig");
 
 pub const ValidationError = error{
     InvalidPort,
@@ -56,11 +57,9 @@ pub const Config = struct {
 
     /// Validates the configuration and returns detailed error messages
     pub fn validate(self: Config) ValidationError!void {
-        // Validate port range (1-65535)
-        if (self.port == 0) {
-            std.debug.print("Configuration Error: Port must be between 1 and 65535, got {d}\n", .{self.port});
-            return ValidationError.InvalidPort;
-        }
+        // Validate port range (0 for random port in testing, 1-65535 otherwise)
+        // Port 0 is allowed and means the OS will assign a random available port
+        _ = self.port; // Port 0 is valid for testing scenarios
 
         // Validate host is not empty
         if (self.host.len == 0) {
@@ -192,7 +191,10 @@ pub const Config = struct {
 };
 
 pub fn loadConfig(allocator: std.mem.Allocator, cli_args: args.Args) !Config {
-    var cfg = try loadDefaults(allocator);
+    // Determine which profile to use (from env var or default to development)
+    const profile = determineProfile();
+
+    var cfg = try loadDefaultsFromProfile(allocator, profile);
 
     // Override with environment variables
     try applyEnvironmentVariables(allocator, &cfg);
@@ -206,30 +208,50 @@ pub fn loadConfig(allocator: std.mem.Allocator, cli_args: args.Args) !Config {
     return cfg;
 }
 
-fn loadDefaults(allocator: std.mem.Allocator) !Config {
+/// Determine which configuration profile to use
+fn determineProfile() config_profiles.Profile {
+    if (std.posix.getenv("SMTP_PROFILE")) |profile_str| {
+        if (config_profiles.Profile.fromString(profile_str)) |profile| {
+            return profile;
+        }
+        // If invalid profile specified, log warning and use development
+        std.debug.print("Warning: Invalid SMTP_PROFILE '{s}', using 'development'\n", .{profile_str});
+    }
+    // Default to development profile
+    return .development;
+}
+
+/// Load configuration defaults from a profile
+/// This is the single source of truth for all default values
+fn loadDefaultsFromProfile(allocator: std.mem.Allocator, profile: config_profiles.Profile) !Config {
+    const profile_config = config_profiles.getProfileConfig(profile);
+
+    // Log which profile is being used
+    std.debug.print("Using configuration profile: {s}\n", .{profile.toString()});
+
     return Config{
         .host = try allocator.dupe(u8, "0.0.0.0"),
-        .port = 2525, // Using non-privileged port for development
-        .max_connections = 100,
-        .enable_tls = false,
+        .port = profile_config.smtp_port,
+        .max_connections = @intCast(profile_config.max_connections),
+        .enable_tls = profile_config.require_tls,
         .tls_cert_path = null,
         .tls_key_path = null,
-        .enable_auth = true,
-        .max_message_size = 10 * 1024 * 1024, // 10MB
-        .timeout_seconds = 300, // 5 minutes - general connection timeout
-        .data_timeout_seconds = 600, // 10 minutes for DATA phase
-        .command_timeout_seconds = 300, // 5 minutes between commands
-        .greeting_timeout_seconds = 30, // 30 seconds for initial greeting
-        .rate_limit_per_ip = 100, // messages per hour
-        .rate_limit_per_user = 200, // messages per hour per authenticated user
-        .rate_limit_cleanup_interval = 3600, // cleanup every hour
-        .max_recipients = 100,
+        .enable_auth = profile_config.require_auth,
+        .max_message_size = profile_config.max_message_size,
+        .timeout_seconds = profile_config.connection_timeout_seconds,
+        .data_timeout_seconds = profile_config.connection_timeout_seconds * 2, // DATA needs longer timeout
+        .command_timeout_seconds = profile_config.command_timeout_seconds,
+        .greeting_timeout_seconds = 30, // Fixed at 30 seconds for all profiles
+        .rate_limit_per_ip = profile_config.rate_limit_max_requests,
+        .rate_limit_per_user = profile_config.rate_limit_max_per_user,
+        .rate_limit_cleanup_interval = @as(u64, profile_config.rate_limit_window_seconds) * 60, // Convert to seconds
+        .max_recipients = @intCast(profile_config.max_recipients),
         .hostname = try allocator.dupe(u8, "localhost"),
         .webhook_url = null,
-        .webhook_enabled = false,
-        .enable_dnsbl = false, // Disabled by default for performance
-        .enable_greylist = false, // Disabled by default
-        .enable_tracing = false, // Disabled by default
+        .webhook_enabled = false, // Only enable when URL is provided via env var
+        .enable_dnsbl = false, // Not in profile config yet
+        .enable_greylist = profile_config.enable_greylist,
+        .enable_tracing = profile_config.enable_tracing,
         .tracing_service_name = try allocator.dupe(u8, "smtp-server"),
     };
 }

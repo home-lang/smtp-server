@@ -8,9 +8,9 @@ pub const ClusterNode = struct {
     id: []const u8,
     address: []const u8,
     port: u16,
-    role: NodeRole,
-    status: NodeStatus,
-    last_heartbeat: i64,
+    role: std.atomic.Value(NodeRole),
+    status: std.atomic.Value(NodeStatus),
+    last_heartbeat: std.atomic.Value(i64),
     metadata: NodeMetadata,
 
     allocator: std.mem.Allocator,
@@ -19,6 +19,42 @@ pub const ClusterNode = struct {
         allocator.free(self.id);
         allocator.free(self.address);
         self.metadata.deinit(allocator);
+    }
+
+    /// Atomically transition role with CAS
+    pub fn transitionRole(self: *ClusterNode, expected: NodeRole, new_role: NodeRole) bool {
+        const result = self.role.cmpxchgStrong(expected, new_role, .acq_rel, .acquire);
+        return result == null; // null means success
+    }
+
+    /// Get current role atomically
+    pub fn getRole(self: *ClusterNode) NodeRole {
+        return self.role.load(.acquire);
+    }
+
+    /// Set role atomically
+    pub fn setRole(self: *ClusterNode, new_role: NodeRole) void {
+        self.role.store(new_role, .release);
+    }
+
+    /// Get current status atomically
+    pub fn getStatus(self: *ClusterNode) NodeStatus {
+        return self.status.load(.acquire);
+    }
+
+    /// Set status atomically
+    pub fn setStatus(self: *ClusterNode, new_status: NodeStatus) void {
+        self.status.store(new_status, .release);
+    }
+
+    /// Update heartbeat timestamp atomically
+    pub fn updateHeartbeat(self: *ClusterNode) void {
+        self.last_heartbeat.store(std.time.timestamp(), .release);
+    }
+
+    /// Get last heartbeat timestamp atomically
+    pub fn getLastHeartbeat(self: *ClusterNode) i64 {
+        return self.last_heartbeat.load(.acquire);
     }
 };
 
@@ -100,9 +136,9 @@ pub const ClusterManager = struct {
             .id = try allocator.dupe(u8, config.node_id),
             .address = try allocator.dupe(u8, config.bind_address),
             .port = config.bind_port,
-            .role = .follower, // Start as follower
-            .status = .healthy,
-            .last_heartbeat = std.time.timestamp(),
+            .role = std.atomic.Value(NodeRole).init(.follower), // Start as follower
+            .status = std.atomic.Value(NodeStatus).init(.healthy),
+            .last_heartbeat = std.atomic.Value(i64).init(std.time.timestamp()),
             .metadata = .{
                 .version = try allocator.dupe(u8, "v0.26.0"),
                 .uptime_seconds = 0,
@@ -231,7 +267,7 @@ pub const ClusterManager = struct {
                 });
 
                 // Trigger leader election if leader is disconnected
-                if (node.role == .leader) {
+                if (node.getRole() == .leader) {
                     try self.startLeaderElection();
                 }
             }
@@ -273,9 +309,9 @@ pub const ClusterManager = struct {
             .id = try self.allocator.dupe(u8, node_id),
             .address = try self.allocator.dupe(u8, host),
             .port = port,
-            .role = .follower,
-            .status = .healthy,
-            .last_heartbeat = std.time.timestamp(),
+            .role = std.atomic.Value(NodeRole).init(.follower),
+            .status = std.atomic.Value(NodeStatus).init(.healthy),
+            .last_heartbeat = std.atomic.Value(i64).init(std.time.timestamp()),
             .metadata = .{
                 .version = try self.allocator.dupe(u8, "unknown"),
                 .uptime_seconds = 0,
@@ -297,13 +333,14 @@ pub const ClusterManager = struct {
 
     /// Start leader election
     fn startLeaderElection(self: *ClusterManager) !void {
-        if (self.local_node.role == .leader) {
+        if (self.local_node.getRole() == .leader) {
             return; // Already leader
         }
 
         std.log.info("Starting leader election", .{});
 
-        self.local_node.role = .candidate;
+        // Atomically transition to candidate
+        self.local_node.setRole(.candidate);
 
         // Simple election: node with lowest ID wins
         // In production, use Raft or similar consensus algorithm
@@ -313,7 +350,8 @@ pub const ClusterManager = struct {
         var iter = self.nodes.iterator();
         while (iter.next()) |entry| {
             const node = entry.value_ptr.*;
-            if (node.status == .healthy or node.status == .degraded) {
+            const node_status = node.getStatus();
+            if (node_status == .healthy or node_status == .degraded) {
                 if (std.mem.lessThan(u8, node.id, lowest_id)) {
                     lowest_id = node.id;
                 }
@@ -321,18 +359,23 @@ pub const ClusterManager = struct {
         }
         self.nodes_mutex.unlock();
 
+        // Atomically transition to leader or follower using CAS
         if (std.mem.eql(u8, lowest_id, self.local_node.id)) {
-            self.local_node.role = .leader;
-            std.log.info("Node elected as LEADER", .{});
+            // Try to become leader if still candidate
+            if (self.local_node.transitionRole(.candidate, .leader)) {
+                std.log.info("Node elected as LEADER", .{});
+            }
         } else {
-            self.local_node.role = .follower;
-            std.log.info("Node remains as FOLLOWER (leader: {s})", .{lowest_id});
+            // Try to become follower if still candidate
+            if (self.local_node.transitionRole(.candidate, .follower)) {
+                std.log.info("Node remains as FOLLOWER (leader: {s})", .{lowest_id});
+            }
         }
     }
 
     /// Get current leader
     pub fn getLeader(self: *ClusterManager) !*ClusterNode {
-        if (self.local_node.role == .leader) {
+        if (self.local_node.getRole() == .leader) {
             return self.local_node;
         }
 
@@ -342,7 +385,9 @@ pub const ClusterManager = struct {
         var iter = self.nodes.iterator();
         while (iter.next()) |entry| {
             const node = entry.value_ptr.*;
-            if (node.role == .leader and (node.status == .healthy or node.status == .degraded)) {
+            const node_role = node.getRole();
+            const node_status = node.getStatus();
+            if (node_role == .leader and (node_status == .healthy or node_status == .degraded)) {
                 return node;
             }
         }
@@ -357,8 +402,8 @@ pub const ClusterManager = struct {
 
         var stats = ClusterStats{
             .total_nodes = 1, // Include local node
-            .healthy_nodes = if (self.local_node.status == .healthy) @as(u32, 1) else 0,
-            .leader_node_id = if (self.local_node.role == .leader) self.local_node.id else null,
+            .healthy_nodes = if (self.local_node.getStatus() == .healthy) @as(u32, 1) else 0,
+            .leader_node_id = if (self.local_node.getRole() == .leader) self.local_node.id else null,
             .total_connections = self.local_node.metadata.active_connections,
             .total_messages_processed = self.local_node.metadata.messages_processed,
         };
@@ -367,10 +412,10 @@ pub const ClusterManager = struct {
         while (iter.next()) |entry| {
             const node = entry.value_ptr.*;
             stats.total_nodes += 1;
-            if (node.status == .healthy) {
+            if (node.getStatus() == .healthy) {
                 stats.healthy_nodes += 1;
             }
-            if (node.role == .leader) {
+            if (node.getRole() == .leader) {
                 stats.leader_node_id = node.id;
             }
             stats.total_connections += node.metadata.active_connections;

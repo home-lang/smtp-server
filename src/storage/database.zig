@@ -79,6 +79,65 @@ pub const Statement = struct {
         }
         return &[_]u8{};
     }
+
+    /// Check if column is NULL
+    pub fn columnIsNull(self: Statement, index: usize) bool {
+        const column_type = sqlite.sqlite3_column_type(self.stmt, @intCast(index));
+        return column_type == sqlite.SQLITE_NULL;
+    }
+
+    /// Get column as Option type - returns null if SQL NULL
+    pub fn columnTextOpt(self: Statement, index: usize) ?[]const u8 {
+        if (self.columnIsNull(index)) {
+            return null;
+        }
+        const text_ptr = sqlite.sqlite3_column_text(self.stmt, @intCast(index));
+        if (text_ptr) |ptr| {
+            const len = sqlite.sqlite3_column_bytes(self.stmt, @intCast(index));
+            return ptr[0..@intCast(len)];
+        }
+        return null;
+    }
+
+    /// Get column as Option type - returns null if SQL NULL
+    pub fn columnInt64Opt(self: Statement, index: usize) ?i64 {
+        if (self.columnIsNull(index)) {
+            return null;
+        }
+        return sqlite.sqlite3_column_int64(self.stmt, @intCast(index));
+    }
+
+    /// Get column as Option type - returns null if SQL NULL
+    pub fn columnDoubleOpt(self: Statement, index: usize) ?f64 {
+        if (self.columnIsNull(index)) {
+            return null;
+        }
+        return sqlite.sqlite3_column_double(self.stmt, @intCast(index));
+    }
+
+    /// Bind NULL value
+    pub fn bindNull(self: Statement, index: usize) !void {
+        const rc = sqlite.sqlite3_bind_null(self.stmt, @intCast(index));
+        if (rc != sqlite.SQLITE_OK) {
+            return DatabaseError.BindFailed;
+        }
+    }
+
+    /// Bind optional value - NULL if none
+    pub fn bindOpt(self: Statement, index: usize, value: anytype) !void {
+        const T = @TypeOf(value);
+        const type_info = @typeInfo(T);
+
+        if (type_info == .optional) {
+            if (value) |v| {
+                try self.bind(index, v);
+            } else {
+                try self.bindNull(index);
+            }
+        } else {
+            @compileError("bindOpt requires an optional type");
+        }
+    }
 };
 
 pub const User = struct {
