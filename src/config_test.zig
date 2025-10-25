@@ -28,6 +28,7 @@ test "configuration can be created with different values" {
         .enable_greylist = false,
         .enable_tracing = false,
         .tracing_service_name = "smtp-server",
+        .enable_json_logging = false,
     };
 
     // Test that defaults are reasonable
@@ -65,6 +66,7 @@ test "port number types" {
         .enable_greylist = false,
         .enable_tracing = false,
         .tracing_service_name = "smtp-server",
+        .enable_json_logging = false,
     };
 
     // Standard SMTP ports
@@ -94,6 +96,7 @@ test "port number types" {
         .enable_greylist = false,
         .enable_tracing = false,
         .tracing_service_name = "smtp-server",
+        .enable_json_logging = false,
     };
 
     try testing.expectEqual(@as(u16, 587), cfg2.port);
@@ -128,6 +131,7 @@ test "configuration struct fields exist" {
         .enable_greylist = false,
         .enable_tracing = false,
         .tracing_service_name = "smtp-server",
+        .enable_json_logging = false,
     };
     _ = allocator;
 
@@ -170,6 +174,7 @@ test "TLS configuration flags" {
         .enable_greylist = false,
         .enable_tracing = false,
         .tracing_service_name = "smtp-server",
+        .enable_json_logging = false,
     };
 
     try testing.expectEqual(true, cfg_tls_on.enable_tls);
@@ -198,6 +203,7 @@ test "TLS configuration flags" {
         .enable_greylist = false,
         .enable_tracing = false,
         .tracing_service_name = "smtp-server",
+        .enable_json_logging = false,
     };
 
     try testing.expectEqual(false, cfg_tls_off.enable_tls);
@@ -228,6 +234,7 @@ test "authentication configuration flags" {
         .enable_greylist = false,
         .enable_tracing = false,
         .tracing_service_name = "smtp-server",
+        .enable_json_logging = false,
     };
 
     try testing.expectEqual(true, cfg_auth_on.enable_auth);
@@ -256,6 +263,7 @@ test "authentication configuration flags" {
         .enable_greylist = false,
         .enable_tracing = false,
         .tracing_service_name = "smtp-server",
+        .enable_json_logging = false,
     };
 
     try testing.expectEqual(false, cfg_auth_off.enable_auth);

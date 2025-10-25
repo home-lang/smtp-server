@@ -1,4 +1,5 @@
 const std = @import("std");
+const path_sanitizer = @import("../core/path_sanitizer.zig");
 
 /// mbox format email storage (RFC 4155)
 /// Traditional Unix mailbox format where messages are stored in a single file
@@ -7,10 +8,28 @@ pub const MboxStorage = struct {
     mbox_path: []const u8,
     mutex: std.Thread.Mutex,
 
+    /// Initialize mbox storage with path validation
+    /// If mbox_path is relative, it will be validated against the current working directory
+    /// If mbox_path is absolute, it will be used as-is (should be pre-validated by caller)
     pub fn init(allocator: std.mem.Allocator, mbox_path: []const u8) !MboxStorage {
+        // Validate and sanitize the path if it appears to be relative
+        const sanitized_path = if (std.fs.path.isAbsolute(mbox_path))
+            try allocator.dupe(u8, mbox_path)
+        else blk: {
+            // For relative paths, sanitize against current directory
+            const cwd = try std.fs.cwd().realpathAlloc(allocator, ".");
+            defer allocator.free(cwd);
+
+            const sanitized = path_sanitizer.PathSanitizer.sanitizePath(allocator, cwd, mbox_path) catch |err| {
+                std.log.err("Invalid mbox path: {s} - {}", .{ mbox_path, err });
+                return error.InvalidMboxPath;
+            };
+            break :blk sanitized;
+        };
+
         return .{
             .allocator = allocator,
-            .mbox_path = try allocator.dupe(u8, mbox_path),
+            .mbox_path = sanitized_path,
             .mutex = .{},
         };
     }

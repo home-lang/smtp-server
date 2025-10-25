@@ -1,4 +1,5 @@
 const std = @import("std");
+const path_sanitizer = @import("../core/path_sanitizer.zig");
 
 /// Backup and restore utilities for email data
 /// Supports multiple backup formats and storage backends
@@ -24,17 +25,45 @@ pub const BackupManager = struct {
         backup_path: []const u8,
         config: BackupConfig,
     ) !BackupManager {
+        // Validate and sanitize paths
+        const sanitized_source = if (std.fs.path.isAbsolute(source_path))
+            try allocator.dupe(u8, source_path)
+        else blk: {
+            const cwd = try std.fs.cwd().realpathAlloc(allocator, ".");
+            defer allocator.free(cwd);
+            break :blk path_sanitizer.PathSanitizer.sanitizePath(allocator, cwd, source_path) catch |err| {
+                std.log.err("Invalid source path: {s} - {}", .{ source_path, err });
+                return error.InvalidSourcePath;
+            };
+        };
+        errdefer allocator.free(sanitized_source);
+
+        const sanitized_backup = if (std.fs.path.isAbsolute(backup_path))
+            try allocator.dupe(u8, backup_path)
+        else blk: {
+            const cwd = try std.fs.cwd().realpathAlloc(allocator, ".");
+            defer allocator.free(cwd);
+            break :blk path_sanitizer.PathSanitizer.sanitizePath(allocator, cwd, backup_path) catch |err| {
+                std.log.err("Invalid backup path: {s} - {}", .{ backup_path, err });
+                allocator.free(sanitized_source);
+                return error.InvalidBackupPath;
+            };
+        };
+        errdefer allocator.free(sanitized_backup);
+
         // Create backup directory
-        std.fs.cwd().makePath(backup_path) catch |err| {
+        std.fs.cwd().makePath(sanitized_backup) catch |err| {
             if (err != error.PathAlreadyExists) {
+                allocator.free(sanitized_source);
+                allocator.free(sanitized_backup);
                 return err;
             }
         };
 
         return .{
             .allocator = allocator,
-            .source_path = try allocator.dupe(u8, source_path),
-            .backup_path = try allocator.dupe(u8, backup_path),
+            .source_path = sanitized_source,
+            .backup_path = sanitized_backup,
             .config = config,
             .mutex = .{},
         };

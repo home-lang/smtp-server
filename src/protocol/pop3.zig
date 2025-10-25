@@ -1,4 +1,5 @@
 const std = @import("std");
+const auth = @import("../auth/auth.zig");
 
 /// POP3 Server Implementation (RFC 1939)
 /// Provides simple mail retrieval via POP3 protocol
@@ -55,13 +56,15 @@ pub const Pop3Session = struct {
     username: ?[]const u8 = null,
     messages: std.ArrayList(Pop3Message),
     maildrop_locked: bool = false,
+    auth_backend: *auth.AuthBackend,
 
-    pub fn init(allocator: std.mem.Allocator, stream: std.net.Stream) Pop3Session {
+    pub fn init(allocator: std.mem.Allocator, stream: std.net.Stream, auth_backend: *auth.AuthBackend) Pop3Session {
         return .{
             .allocator = allocator,
             .stream = stream,
             .state = .authorization,
             .messages = std.ArrayList(Pop3Message){},
+            .auth_backend = auth_backend,
         };
     }
 
@@ -129,8 +132,6 @@ pub const Pop3Session = struct {
 
     /// Handle PASS command
     fn handlePass(self: *Pop3Session, password: []const u8) !void {
-        _ = password; // Would validate against auth system
-
         if (self.state != .authorization) {
             try self.sendErr("Must send USER first");
             return;
@@ -140,6 +141,21 @@ pub const Pop3Session = struct {
             try self.sendErr("Must send USER first");
             return;
         }
+
+        // Validate credentials against auth backend
+        const valid = self.auth_backend.verifyCredentials(self.username.?, password) catch |err| {
+            std.log.err("POP3 authentication error: {}", .{err});
+            try self.sendErr("Authentication failed");
+            return;
+        };
+
+        if (!valid) {
+            std.log.warn("Failed POP3 login attempt for user: {s}", .{self.username.?});
+            try self.sendErr("Authentication failed");
+            return;
+        }
+
+        std.log.info("Successful POP3 login for user: {s}", .{self.username.?});
 
         // Lock maildrop and load messages
         try self.lockMaildrop();
@@ -561,13 +577,15 @@ pub const Pop3Server = struct {
     sessions: std.ArrayList(*Pop3Session),
     running: std.atomic.Value(bool),
     mutex: std.Thread.Mutex = .{},
+    auth_backend: *auth.AuthBackend,
 
-    pub fn init(allocator: std.mem.Allocator, config: Pop3Config) Pop3Server {
+    pub fn init(allocator: std.mem.Allocator, config: Pop3Config, auth_backend: *auth.AuthBackend) Pop3Server {
         return .{
             .allocator = allocator,
             .config = config,
             .sessions = std.ArrayList(*Pop3Session){},
             .running = std.atomic.Value(bool).init(false),
+            .auth_backend = auth_backend,
         };
     }
 
@@ -617,7 +635,7 @@ pub const Pop3Server = struct {
     /// Handle a client connection
     fn handleConnection(self: *Pop3Server, stream: std.net.Stream) !void {
         var session = try self.allocator.create(Pop3Session);
-        session.* = Pop3Session.init(self.allocator, stream);
+        session.* = Pop3Session.init(self.allocator, stream, self.auth_backend);
         defer {
             session.deinit();
             self.allocator.destroy(session);

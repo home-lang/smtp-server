@@ -1,6 +1,7 @@
 const std = @import("std");
 const net = std.net;
 const Allocator = std.mem.Allocator;
+const auth = @import("../auth/auth.zig");
 
 /// Microsoft Exchange ActiveSync Implementation
 /// MS-ASHTTP and MS-ASCMD protocols
@@ -195,12 +196,14 @@ pub const ActiveSyncSession = struct {
     policy_key: ?[]const u8 = null,
     authenticated: bool = false,
     request_buffer: std.ArrayList(u8),
+    auth_backend: *auth.AuthBackend,
 
-    pub fn init(allocator: Allocator, stream: net.Stream) !ActiveSyncSession {
+    pub fn init(allocator: Allocator, stream: net.Stream, auth_backend: *auth.AuthBackend) !ActiveSyncSession {
         return ActiveSyncSession{
             .allocator = allocator,
             .stream = stream,
             .request_buffer = std.ArrayList(u8){},
+            .auth_backend = auth_backend,
         };
     }
 
@@ -253,12 +256,24 @@ pub const ActiveSyncSession = struct {
             if (trimmed.len == 0) break;
 
             if (std.mem.startsWith(u8, trimmed, "Authorization:")) {
-                // Parse Basic Auth
+                // Parse and validate Basic Auth
                 const auth_value = std.mem.trim(u8, trimmed[14..], &std.ascii.whitespace);
-                _ = auth_value;
-                // TODO: Validate credentials
-                self.authenticated = true;
-                self.username = try self.allocator.dupe(u8, "testuser");
+
+                const validated_username = self.auth_backend.verifyBasicAuth(auth_value) catch |err| {
+                    std.log.err("ActiveSync authentication error: {}", .{err});
+                    try self.sendAuthRequired();
+                    return true;
+                };
+
+                if (validated_username) |username| {
+                    self.authenticated = true;
+                    self.username = username;
+                    std.log.info("Successful ActiveSync authentication for user: {s}", .{username});
+                } else {
+                    std.log.warn("Failed ActiveSync authentication attempt");
+                    try self.sendAuthRequired();
+                    return true;
+                }
             } else if (std.mem.startsWith(u8, trimmed, "Content-Type:")) {
                 content_type = std.mem.trim(u8, trimmed[13..], &std.ascii.whitespace);
             } else if (std.mem.startsWith(u8, trimmed, "User-Agent:")) {
@@ -591,14 +606,16 @@ pub const ActiveSyncServer = struct {
     running: std.atomic.Value(bool),
     sessions: std.ArrayList(*ActiveSyncSession),
     sessions_mutex: std.Thread.Mutex,
+    auth_backend: *auth.AuthBackend,
 
-    pub fn init(allocator: Allocator, config: ActiveSyncConfig) ActiveSyncServer {
+    pub fn init(allocator: Allocator, config: ActiveSyncConfig, auth_backend: *auth.AuthBackend) ActiveSyncServer {
         return ActiveSyncServer{
             .allocator = allocator,
             .config = config,
             .running = std.atomic.Value(bool).init(false),
             .sessions = std.ArrayList(*ActiveSyncSession){},
             .sessions_mutex = std.Thread.Mutex{},
+            .auth_backend = auth_backend,
         };
     }
 
@@ -654,7 +671,7 @@ pub const ActiveSyncServer = struct {
     fn handleConnection(self: *ActiveSyncServer, stream: net.Stream) void {
         defer stream.close();
 
-        var session = ActiveSyncSession.init(self.allocator, stream) catch |err| {
+        var session = ActiveSyncSession.init(self.allocator, stream, self.auth_backend) catch |err| {
             std.debug.print("[ActiveSync] Session init error: {}\n", .{err});
             return;
         };

@@ -6,6 +6,39 @@ const queue_mod = @import("../delivery/queue.zig");
 const filter_mod = @import("../message/filter.zig");
 const search_mod = @import("search.zig");
 
+/// Validate username format
+fn validateUsername(username: []const u8) !void {
+    // Length check
+    if (username.len == 0 or username.len > 64) {
+        std.log.warn("Invalid username length: {d}", .{username.len});
+        return error.InvalidUsernameLength;
+    }
+
+    // Character validation - allow alphanumeric, underscore, dash, and dot
+    for (username) |c| {
+        if (!std.ascii.isAlphanumeric(c) and c != '_' and c != '-' and c != '.') {
+            std.log.warn("Invalid character in username: {c} (0x{x})", .{ c, c });
+            return error.InvalidUsernameFormat;
+        }
+    }
+
+    // No leading/trailing dots or dashes
+    if (username[0] == '.' or username[0] == '-' or
+        username[username.len - 1] == '.' or username[username.len - 1] == '-')
+    {
+        std.log.warn("Username has invalid leading/trailing characters: {s}", .{username});
+        return error.InvalidUsernameFormat;
+    }
+
+    // Prevent consecutive dots
+    for (0..username.len - 1) |i| {
+        if (username[i] == '.' and username[i + 1] == '.') {
+            std.log.warn("Username has consecutive dots: {s}", .{username});
+            return error.InvalidUsernameFormat;
+        }
+    }
+}
+
 /// REST API server for SMTP management
 pub const APIServer = struct {
     allocator: std.mem.Allocator,
@@ -265,9 +298,8 @@ pub const APIServer = struct {
             username = username[0..idx];
         }
 
-        if (username.len == 0) {
-            return self.sendError(stream, 400, "Username is required");
-        }
+        // Validate username
+        try validateUsername(username);
 
         // Get user from database
         const user = self.db.getUserByUsername(username) catch |err| {

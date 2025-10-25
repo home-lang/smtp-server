@@ -1,6 +1,7 @@
 const std = @import("std");
 const net = std.net;
 const Allocator = std.mem.Allocator;
+const auth = @import("../auth/auth.zig");
 
 /// CalDAV/CardDAV Server Implementation
 /// RFC 4791 (CalDAV) and RFC 6352 (CardDAV)
@@ -128,12 +129,14 @@ pub const CalDavSession = struct {
     authenticated: bool = false,
     request_buffer: std.ArrayList(u8),
     current_path: []const u8 = "/",
+    auth_backend: *auth.AuthBackend,
 
-    pub fn init(allocator: Allocator, stream: net.Stream) !CalDavSession {
+    pub fn init(allocator: Allocator, stream: net.Stream, auth_backend: *auth.AuthBackend) !CalDavSession {
         return CalDavSession{
             .allocator = allocator,
             .stream = stream,
             .request_buffer = std.ArrayList(u8){},
+            .auth_backend = auth_backend,
         };
     }
 
@@ -188,9 +191,22 @@ pub const CalDavSession = struct {
                 return true;
             }
 
-            // TODO: Validate credentials
-            self.authenticated = true;
-            self.username = try self.allocator.dupe(u8, "testuser");
+            // Validate credentials using auth backend
+            const validated_username = self.auth_backend.verifyBasicAuth(auth_header.?) catch |err| {
+                std.log.err("CalDAV authentication error: {}", .{err});
+                try self.sendAuthRequired();
+                return true;
+            };
+
+            if (validated_username) |username| {
+                self.authenticated = true;
+                self.username = username;
+                std.log.info("Successful CalDAV authentication for user: {s}", .{username});
+            } else {
+                std.log.warn("Failed CalDAV authentication attempt");
+                try self.sendAuthRequired();
+                return true;
+            }
         }
 
         // Route request based on method and path
@@ -567,14 +583,16 @@ pub const CalDavServer = struct {
     running: std.atomic.Value(bool),
     sessions: std.ArrayList(*CalDavSession),
     sessions_mutex: std.Thread.Mutex,
+    auth_backend: *auth.AuthBackend,
 
-    pub fn init(allocator: Allocator, config: CalDavConfig) CalDavServer {
+    pub fn init(allocator: Allocator, config: CalDavConfig, auth_backend: *auth.AuthBackend) CalDavServer {
         return CalDavServer{
             .allocator = allocator,
             .config = config,
             .running = std.atomic.Value(bool).init(false),
             .sessions = std.ArrayList(*CalDavSession){},
             .sessions_mutex = std.Thread.Mutex{},
+            .auth_backend = auth_backend,
         };
     }
 
@@ -630,7 +648,7 @@ pub const CalDavServer = struct {
     fn handleConnection(self: *CalDavServer, stream: net.Stream) void {
         defer stream.close();
 
-        var session = CalDavSession.init(self.allocator, stream) catch |err| {
+        var session = CalDavSession.init(self.allocator, stream, self.auth_backend) catch |err| {
             std.debug.print("[CalDAV/CardDAV] Session init error: {}\n", .{err});
             return;
         };

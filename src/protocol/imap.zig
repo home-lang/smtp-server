@@ -1,4 +1,5 @@
 const std = @import("std");
+const auth = @import("../auth/auth.zig");
 
 /// IMAP4rev1 Server Implementation (RFC 3501)
 /// Provides mail retrieval and mailbox management via IMAP protocol
@@ -255,13 +256,15 @@ pub const ImapSession = struct {
     tag: ?[]const u8 = null,
     command_buffer: std.ArrayList(u8),
     idle_mode: bool = false,
+    auth_backend: *auth.AuthBackend,
 
-    pub fn init(allocator: std.mem.Allocator, stream: std.net.Stream) ImapSession {
+    pub fn init(allocator: std.mem.Allocator, stream: std.net.Stream, auth_backend: *auth.AuthBackend) ImapSession {
         return .{
             .allocator = allocator,
             .stream = stream,
             .state = .not_authenticated,
             .command_buffer = std.ArrayList(u8){},
+            .auth_backend = auth_backend,
         };
     }
 
@@ -331,10 +334,21 @@ pub const ImapSession = struct {
 
     /// Handle LOGIN command
     fn handleLogin(self: *ImapSession, tag: []const u8, username: []const u8, password: []const u8) !void {
-        _ = password; // Would validate against auth system
-
         if (self.state != .not_authenticated) {
             try self.sendResponse(tag, "BAD", "Already authenticated");
+            return;
+        }
+
+        // Validate credentials against auth backend
+        const valid = self.auth_backend.verifyCredentials(username, password) catch |err| {
+            std.log.err("Authentication error: {}", .{err});
+            try self.sendResponse(tag, "NO", "LOGIN failed");
+            return;
+        };
+
+        if (!valid) {
+            std.log.warn("Failed IMAP login attempt for user: {s}", .{username});
+            try self.sendResponse(tag, "NO", "LOGIN failed");
             return;
         }
 
@@ -342,6 +356,7 @@ pub const ImapSession = struct {
         self.username = try self.allocator.dupe(u8, username);
         self.state = .authenticated;
 
+        std.log.info("Successful IMAP login for user: {s}", .{username});
         try self.sendResponse(tag, "OK", "LOGIN completed");
     }
 
@@ -447,13 +462,15 @@ pub const ImapServer = struct {
     sessions: std.ArrayList(*ImapSession),
     running: std.atomic.Value(bool),
     mutex: std.Thread.Mutex = .{},
+    auth_backend: *auth.AuthBackend,
 
-    pub fn init(allocator: std.mem.Allocator, config: ImapConfig) ImapServer {
+    pub fn init(allocator: std.mem.Allocator, config: ImapConfig, auth_backend: *auth.AuthBackend) ImapServer {
         return .{
             .allocator = allocator,
             .config = config,
             .sessions = std.ArrayList(*ImapSession){},
             .running = std.atomic.Value(bool).init(false),
+            .auth_backend = auth_backend,
         };
     }
 
@@ -503,7 +520,7 @@ pub const ImapServer = struct {
     /// Handle a client connection
     fn handleConnection(self: *ImapServer, stream: std.net.Stream) !void {
         var session = try self.allocator.create(ImapSession);
-        session.* = ImapSession.init(self.allocator, stream);
+        session.* = ImapSession.init(self.allocator, stream, self.auth_backend);
         defer {
             session.deinit();
             self.allocator.destroy(session);

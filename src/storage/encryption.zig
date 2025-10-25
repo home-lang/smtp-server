@@ -482,8 +482,14 @@ test "serialization and deserialization" {
 test "password-based key derivation" {
     const testing = std.testing;
 
-    const password = "super-secret-password";
-    const salt = "random-salt-12345678";
+    // Generate random password and salt for testing instead of hardcoding
+    var password_buf: [32]u8 = undefined;
+    var salt_buf: [32]u8 = undefined;
+    std.crypto.random.bytes(&password_buf);
+    std.crypto.random.bytes(&salt_buf);
+
+    const password = &password_buf;
+    const salt = &salt_buf;
 
     const key = try EmailEncryption.deriveKeyFromPassword(testing.allocator, password, salt);
 

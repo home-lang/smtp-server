@@ -360,7 +360,11 @@ pub fn validateEmailAddress(email: []const u8) bool {
 pub fn sanitizeInput(input: []const u8) bool {
     // Check for common injection patterns
     if (std.mem.indexOf(u8, input, "\x00") != null) return false; // Null bytes
-    if (std.mem.indexOf(u8, input, "\r\n\r\n") != null) return false; // Header injection
+
+    // Block ALL CRLF sequences to prevent header injection
+    if (std.mem.indexOf(u8, input, "\r\n") != null) return false;
+    if (std.mem.indexOf(u8, input, "\n") != null) return false;
+    if (std.mem.indexOf(u8, input, "\r") != null) return false;
 
     return true;
 }

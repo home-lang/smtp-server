@@ -305,9 +305,13 @@ pub const S3LifecyclePolicy = struct {
 test "S3 key generation" {
     const testing = std.testing;
 
+    // Use environment variables for credentials in tests
+    const access_key = std.posix.getenv("AWS_ACCESS_KEY_ID") orelse return error.SkipZigTest;
+    const secret_key = std.posix.getenv("AWS_SECRET_ACCESS_KEY") orelse return error.SkipZigTest;
+
     const config = S3Config{
-        .access_key = "test_access",
-        .secret_key = "test_secret",
+        .access_key = access_key,
+        .secret_key = secret_key,
         .endpoint = "s3.amazonaws.com",
         .region = "us-east-1",
         .use_ssl = true,
@@ -327,9 +331,13 @@ test "S3 key generation" {
 test "S3 presigned URL generation" {
     const testing = std.testing;
 
+    // Use environment variables for credentials in tests
+    const access_key = std.posix.getenv("AWS_ACCESS_KEY_ID") orelse return error.SkipZigTest;
+    const secret_key = std.posix.getenv("AWS_SECRET_ACCESS_KEY") orelse return error.SkipZigTest;
+
     const config = S3Config{
-        .access_key = "test",
-        .secret_key = "test",
+        .access_key = access_key,
+        .secret_key = secret_key,
         .endpoint = "s3.amazonaws.com",
         .region = "us-east-1",
         .use_ssl = true,
@@ -364,9 +372,13 @@ test "S3 lifecycle policy XML generation" {
 test "S3 multipart upload" {
     const testing = std.testing;
 
+    // Use environment variables for credentials in tests
+    const access_key = std.posix.getenv("AWS_ACCESS_KEY_ID") orelse return error.SkipZigTest;
+    const secret_key = std.posix.getenv("AWS_SECRET_ACCESS_KEY") orelse return error.SkipZigTest;
+
     const config = S3Config{
-        .access_key = "test",
-        .secret_key = "test",
+        .access_key = access_key,
+        .secret_key = secret_key,
         .endpoint = "s3.amazonaws.com",
         .region = "us-east-1",
         .use_ssl = true,

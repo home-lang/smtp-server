@@ -1,5 +1,6 @@
 const std = @import("std");
 const mime = @import("mime.zig");
+const path_sanitizer = @import("../core/path_sanitizer.zig");
 
 /// Email attachment
 pub const Attachment = struct {
@@ -37,13 +38,35 @@ pub const Attachment = struct {
         }
     }
 
-    /// Save attachment to file
-    pub fn saveToFile(self: *Attachment, path: []const u8) !void {
+    /// Save attachment to file with path sanitization
+    /// The path should be a directory path where the attachment will be saved
+    /// The filename will be sanitized and appended to the directory
+    pub fn saveToFile(self: *Attachment, directory_path: []const u8) !void {
         if (self.decoded_data == null) {
             try self.decode();
         }
 
-        const file = try std.fs.cwd().createFile(path, .{});
+        // Sanitize the filename to prevent directory traversal
+        const safe_filename = try path_sanitizer.PathSanitizer.sanitizeFilename(self.allocator, self.filename);
+        defer self.allocator.free(safe_filename);
+
+        // Sanitize the full path
+        const safe_path = if (std.fs.path.isAbsolute(directory_path))
+            try std.fs.path.join(self.allocator, &[_][]const u8{ directory_path, safe_filename })
+        else blk: {
+            const cwd = try std.fs.cwd().realpathAlloc(self.allocator, ".");
+            defer self.allocator.free(cwd);
+
+            const sanitized = try path_sanitizer.PathSanitizer.sanitizePath(self.allocator, cwd, directory_path);
+            defer self.allocator.free(sanitized);
+
+            break :blk try std.fs.path.join(self.allocator, &[_][]const u8{ sanitized, safe_filename });
+        };
+        defer self.allocator.free(safe_path);
+
+        std.log.info("Saving attachment to: {s}", .{safe_path});
+
+        const file = try std.fs.cwd().createFile(safe_path, .{});
         defer file.close();
 
         try file.writeAll(self.decoded_data.?);
