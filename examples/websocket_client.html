@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMTP Server - WebSocket Notifications</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+        .status.connected {
+            background: #4CAF50;
+            color: white;
+        }
+        .status.disconnected {
+            background: #f44336;
+            color: white;
+        }
+        .status.connecting {
+            background: #FFC107;
+            color: black;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 10px 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+        .subscriptions {
+            margin-bottom: 20px;
+        }
+        .subscription-item {
+            display: inline-block;
+            padding: 5px 10px;
+            margin: 5px;
+            background: #e3f2fd;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        #events {
+            max-height: 500px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+        }
+        .event {
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            border-left: 4px solid #4CAF50;
+            background: #f9f9f9;
+        }
+        .event.new_email {
+            border-left-color: #2196F3;
+        }
+        .event.calendar_event_added {
+            border-left-color: #FF9800;
+        }
+        .event.contact_added {
+            border-left-color: #9C27B0;
+        }
+        .event.sync_completed {
+            border-left-color: #4CAF50;
+        }
+        .event-type {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        .event-data {
+            color: #666;
+            font-size: 14px;
+        }
+        .event-time {
+            color: #999;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .stat-label {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔔 SMTP Server - Real-Time Notifications</h1>
+
+    <div class="container">
+        <div id="status" class="status disconnected">Disconnected</div>
+
+        <div class="controls">
+            <button id="connectBtn" onclick="connect()">Connect</button>
+            <button id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+            <button onclick="sendTestNotification()" disabled id="testBtn">Send Test Notification</button>
+            <button onclick="clearEvents()">Clear Events</button>
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="totalEvents">0</div>
+                <div class="stat-label">Total Events</div>
+            </div>
+            <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                <div class="stat-value" id="newEmails">0</div>
+                <div class="stat-label">New Emails</div>
+            </div>
+            <div class="stat-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                <div class="stat-value" id="calendarEvents">0</div>
+                <div class="stat-label">Calendar Events</div>
+            </div>
+            <div class="stat-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+                <div class="stat-value" id="contactUpdates">0</div>
+                <div class="stat-label">Contact Updates</div>
+            </div>
+        </div>
+
+        <h3>Subscriptions</h3>
+        <div class="subscriptions">
+            <button onclick="subscribe('new_email')">📧 New Email</button>
+            <button onclick="subscribe('calendar_event_added')">📅 Calendar Events</button>
+            <button onclick="subscribe('contact_added')">👤 Contacts</button>
+            <button onclick="subscribe('sync_completed')">🔄 Sync Status</button>
+            <button onclick="subscribe('*')">✨ All Events</button>
+        </div>
+        <div id="subscriptionsList"></div>
+    </div>
+
+    <div class="container">
+        <h3>Live Events</h3>
+        <div id="events"></div>
+    </div>
+
+    <script>
+        let ws = null;
+        let subscriptions = new Set();
+        let stats = {
+            total: 0,
+            emails: 0,
+            calendar: 0,
+            contacts: 0
+        };
+
+        function connect() {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = 'Connecting...';
+            statusEl.className = 'status connecting';
+
+            // Connect to WebSocket server
+            ws = new WebSocket('ws://localhost:8080/notifications');
+
+            ws.onopen = function() {
+                console.log('WebSocket connected');
+                statusEl.textContent = 'Connected';
+                statusEl.className = 'status connected';
+                document.getElementById('connectBtn').disabled = true;
+                document.getElementById('disconnectBtn').disabled = false;
+                document.getElementById('testBtn').disabled = false;
+
+                // Send ping to test connection
+                sendMessage({ action: 'ping' });
+            };
+
+            ws.onmessage = function(event) {
+                console.log('Message received:', event.data);
+                const data = JSON.parse(event.data);
+
+                if (data.type) {
+                    // It's a notification event
+                    handleEvent(data);
+                } else if (data.status === 'subscribed') {
+                    console.log('Subscribed to:', data.event_type);
+                } else if (data.status === 'pong') {
+                    console.log('Pong received');
+                }
+            };
+
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+                statusEl.textContent = 'Error';
+                statusEl.className = 'status disconnected';
+            };
+
+            ws.onclose = function() {
+                console.log('WebSocket disconnected');
+                statusEl.textContent = 'Disconnected';
+                statusEl.className = 'status disconnected';
+                document.getElementById('connectBtn').disabled = false;
+                document.getElementById('disconnectBtn').disabled = true;
+                document.getElementById('testBtn').disabled = true;
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        function sendMessage(message) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(message));
+            }
+        }
+
+        function subscribe(eventType) {
+            if (!subscriptions.has(eventType)) {
+                subscriptions.add(eventType);
+                sendMessage({ action: 'subscribe', event_type: eventType });
+                updateSubscriptionsList();
+            }
+        }
+
+        function updateSubscriptionsList() {
+            const list = document.getElementById('subscriptionsList');
+            list.innerHTML = '';
+            subscriptions.forEach(sub => {
+                const item = document.createElement('div');
+                item.className = 'subscription-item';
+                item.textContent = sub;
+                list.appendChild(item);
+            });
+        }
+
+        function handleEvent(event) {
+            stats.total++;
+            document.getElementById('totalEvents').textContent = stats.total;
+
+            if (event.type.includes('email')) {
+                stats.emails++;
+                document.getElementById('newEmails').textContent = stats.emails;
+            } else if (event.type.includes('calendar')) {
+                stats.calendar++;
+                document.getElementById('calendarEvents').textContent = stats.calendar;
+            } else if (event.type.includes('contact')) {
+                stats.contacts++;
+                document.getElementById('contactUpdates').textContent = stats.contacts;
+            }
+
+            const eventsDiv = document.getElementById('events');
+            const eventEl = document.createElement('div');
+            eventEl.className = 'event ' + event.type;
+
+            const typeEl = document.createElement('div');
+            typeEl.className = 'event-type';
+            typeEl.textContent = event.type.replace(/_/g, ' ').toUpperCase();
+
+            const dataEl = document.createElement('div');
+            dataEl.className = 'event-data';
+            dataEl.textContent = JSON.stringify(event.data, null, 2);
+
+            const timeEl = document.createElement('div');
+            timeEl.className = 'event-time';
+            const date = new Date(event.timestamp * 1000);
+            timeEl.textContent = date.toLocaleString();
+
+            eventEl.appendChild(typeEl);
+            eventEl.appendChild(dataEl);
+            eventEl.appendChild(timeEl);
+
+            eventsDiv.insertBefore(eventEl, eventsDiv.firstChild);
+
+            // Show desktop notification if supported
+            if (Notification.permission === 'granted') {
+                new Notification('SMTP Server Notification', {
+                    body: typeEl.textContent,
+                    icon: '📧'
+                });
+            }
+        }
+
+        function sendTestNotification() {
+            // This would normally come from the server
+            // For demo purposes, we simulate it
+            const testEvents = [
+                {
+                    type: 'new_email',
+                    timestamp: Math.floor(Date.now() / 1000),
+                    data: {
+                        message_id: 'msg-' + Date.now(),
+                        from: 'sender@example.com',
+                        subject: 'Test Email',
+                        folder: 'INBOX'
+                    }
+                },
+                {
+                    type: 'calendar_event_added',
+                    timestamp: Math.floor(Date.now() / 1000),
+                    data: {
+                        event_id: 'evt-' + Date.now(),
+                        summary: 'Team Meeting',
+                        start_time: Math.floor(Date.now() / 1000) + 3600
+                    }
+                }
+            ];
+
+            const randomEvent = testEvents[Math.floor(Math.random() * testEvents.length)];
+            handleEvent(randomEvent);
+        }
+
+        function clearEvents() {
+            document.getElementById('events').innerHTML = '';
+        }
+
+        // Request notification permission
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+
+        // Auto-connect on page load
+        window.addEventListener('load', function() {
+            // Uncomment to auto-connect
+            // connect();
+        });
+    </script>
+</body>
+</html>

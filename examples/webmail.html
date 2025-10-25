@@ -1,0 +1,1156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMTP Server - Mail</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+            overflow: hidden;
+            background: #f5f5f7;
+        }
+
+        /* Toolbar */
+        .toolbar {
+            height: 52px;
+            background: linear-gradient(180deg, #fafafa 0%, #f0f0f0 100%);
+            border-bottom: 1px solid #d1d1d6;
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            gap: 12px;
+        }
+
+        .toolbar-button {
+            background: linear-gradient(180deg, #fff 0%, #f8f8f8 100%);
+            border: 1px solid #c4c4c6;
+            border-radius: 4px;
+            padding: 6px 16px;
+            font-size: 13px;
+            cursor: pointer;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .toolbar-button:hover {
+            background: linear-gradient(180deg, #f8f8f8 0%, #f0f0f0 100%);
+        }
+
+        .toolbar-button:active {
+            background: linear-gradient(180deg, #e8e8e8 0%, #e0e0e0 100%);
+        }
+
+        .toolbar-search {
+            flex: 1;
+            max-width: 300px;
+            background: white;
+            border: 1px solid #d1d1d6;
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 13px;
+        }
+
+        .toolbar-status {
+            margin-left: auto;
+            font-size: 12px;
+            color: #666;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #34c759;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Main Layout */
+        .main-container {
+            display: flex;
+            height: calc(100vh - 52px);
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 200px;
+            background: linear-gradient(180deg, #e8e8ea 0%, #dcdcde 100%);
+            border-right: 1px solid #c4c4c6;
+            overflow-y: auto;
+        }
+
+        .sidebar-section {
+            padding: 12px 0;
+            border-bottom: 1px solid #c4c4c6;
+        }
+
+        .sidebar-header {
+            padding: 4px 12px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .sidebar-item {
+            padding: 6px 12px;
+            font-size: 13px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #333;
+        }
+
+        .sidebar-item:hover {
+            background: rgba(0, 0, 0, 0.05);
+        }
+
+        .sidebar-item.active {
+            background: linear-gradient(90deg, #007aff 0%, #0051d5 100%);
+            color: white;
+        }
+
+        .sidebar-badge {
+            margin-left: auto;
+            background: #007aff;
+            color: white;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-weight: 600;
+        }
+
+        /* Message List */
+        .message-list {
+            width: 350px;
+            background: white;
+            border-right: 1px solid #d1d1d6;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message-list-header {
+            padding: 12px 16px;
+            border-bottom: 1px solid #e5e5ea;
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .message-list-content {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .message-item {
+            padding: 12px 16px;
+            border-bottom: 1px solid #e5e5ea;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .message-item:hover {
+            background: #f5f5f7;
+        }
+
+        .message-item.selected {
+            background: #007aff;
+            color: white;
+        }
+
+        .message-item.selected .message-subject,
+        .message-item.selected .message-preview,
+        .message-item.selected .message-time {
+            color: white !important;
+        }
+
+        .message-item.unread {
+            background: #f9f9fb;
+            font-weight: 600;
+        }
+
+        .message-item.unread .message-from {
+            font-weight: 700;
+        }
+
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+
+        .message-from {
+            font-size: 13px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        .message-time {
+            font-size: 11px;
+            color: #8e8e93;
+        }
+
+        .message-subject {
+            font-size: 12px;
+            color: #333;
+            margin-bottom: 2px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .message-preview {
+            font-size: 11px;
+            color: #8e8e93;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* Message Content */
+        .message-content {
+            flex: 1;
+            background: white;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message-content-header {
+            padding: 20px;
+            border-bottom: 1px solid #e5e5ea;
+        }
+
+        .message-content-subject {
+            font-size: 20px;
+            font-weight: 600;
+            color: #1d1d1f;
+            margin-bottom: 16px;
+        }
+
+        .message-content-meta {
+            display: flex;
+            gap: 12px;
+            flex-direction: column;
+        }
+
+        .message-meta-row {
+            display: flex;
+            gap: 8px;
+            font-size: 13px;
+        }
+
+        .message-meta-label {
+            color: #8e8e93;
+            min-width: 60px;
+        }
+
+        .message-meta-value {
+            color: #1d1d1f;
+        }
+
+        .message-content-body {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            font-size: 14px;
+            line-height: 1.6;
+            color: #1d1d1f;
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #8e8e93;
+        }
+
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+        }
+
+        .empty-state-text {
+            font-size: 16px;
+        }
+
+        /* Compose Modal */
+        .compose-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .compose-modal.active {
+            display: flex;
+        }
+
+        .compose-window {
+            width: 700px;
+            max-height: 80vh;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .compose-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid #e5e5ea;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .compose-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #1d1d1f;
+        }
+
+        .compose-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .compose-field {
+            padding: 12px 20px;
+            border-bottom: 1px solid #e5e5ea;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .compose-label {
+            font-size: 13px;
+            color: #8e8e93;
+            min-width: 50px;
+        }
+
+        .compose-input {
+            flex: 1;
+            border: none;
+            outline: none;
+            font-size: 13px;
+            color: #1d1d1f;
+        }
+
+        .compose-body {
+            flex: 1;
+            padding: 20px;
+        }
+
+        .compose-textarea {
+            width: 100%;
+            height: 300px;
+            border: none;
+            outline: none;
+            font-size: 14px;
+            font-family: inherit;
+            resize: none;
+            color: #1d1d1f;
+        }
+
+        /* Dev Tools Panel */
+        .dev-tools {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 300px;
+            background: #1d1d1f;
+            border-top: 1px solid #000;
+            transform: translateY(100%);
+            transition: transform 0.3s ease;
+            z-index: 999;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .dev-tools.active {
+            transform: translateY(0);
+        }
+
+        .dev-tools-header {
+            background: #2d2d2f;
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            border-bottom: 1px solid #000;
+        }
+
+        .dev-tools-tab {
+            padding: 6px 12px;
+            background: transparent;
+            border: none;
+            color: #8e8e93;
+            font-size: 12px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        .dev-tools-tab.active {
+            background: #007aff;
+            color: white;
+        }
+
+        .dev-tools-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+            font-size: 12px;
+        }
+
+        .dev-log-entry {
+            padding: 8px;
+            border-bottom: 1px solid #2d2d2f;
+            color: #e8e8ea;
+        }
+
+        .dev-log-time {
+            color: #8e8e93;
+            margin-right: 8px;
+        }
+
+        .dev-log-type {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            margin-right: 8px;
+        }
+
+        .dev-log-type.smtp {
+            background: #007aff;
+            color: white;
+        }
+
+        .dev-log-type.imap {
+            background: #34c759;
+            color: white;
+        }
+
+        .dev-log-type.ws {
+            background: #ff9500;
+            color: white;
+        }
+
+        .dev-log-type.error {
+            background: #ff3b30;
+            color: white;
+        }
+
+        /* SMTP Test Form */
+        .smtp-test-form {
+            background: #2d2d2f;
+            padding: 16px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+        }
+
+        .smtp-test-row {
+            margin-bottom: 12px;
+        }
+
+        .smtp-test-label {
+            display: block;
+            color: #8e8e93;
+            font-size: 11px;
+            margin-bottom: 4px;
+        }
+
+        .smtp-test-input {
+            width: 100%;
+            background: #1d1d1f;
+            border: 1px solid #3d3d3f;
+            color: #e8e8ea;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .smtp-test-button {
+            background: #007aff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .smtp-test-button:hover {
+            background: #0051d5;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f5f5f7;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #c4c4c6;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a4a4a6;
+        }
+    </style>
+</head>
+<body>
+    <!-- Toolbar -->
+    <div class="toolbar">
+        <button class="toolbar-button" onclick="openCompose()">
+            <span>✉️</span>
+            <span>New Message</span>
+        </button>
+        <button class="toolbar-button" onclick="refreshMessages()">
+            <span>🔄</span>
+        </button>
+        <button class="toolbar-button" onclick="deleteMessage()">
+            <span>🗑️</span>
+        </button>
+        <input type="text" class="toolbar-search" placeholder="Search messages..." onkeyup="searchMessages(this.value)">
+        <div class="toolbar-status">
+            <div class="status-dot"></div>
+            <span id="statusText">Connected</span>
+            <span>•</span>
+            <span id="messageCount">0 messages</span>
+        </div>
+        <button class="toolbar-button" onclick="toggleDevTools()">
+            <span>🔧</span>
+            <span>Dev Tools</span>
+        </button>
+    </div>
+
+    <!-- Main Container -->
+    <div class="main-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-section">
+                <div class="sidebar-header">Mailboxes</div>
+                <div class="sidebar-item active" onclick="selectFolder('inbox')">
+                    <span>📥</span>
+                    <span>Inbox</span>
+                    <span class="sidebar-badge" id="inboxCount">0</span>
+                </div>
+                <div class="sidebar-item" onclick="selectFolder('sent')">
+                    <span>📤</span>
+                    <span>Sent</span>
+                </div>
+                <div class="sidebar-item" onclick="selectFolder('drafts')">
+                    <span>📝</span>
+                    <span>Drafts</span>
+                </div>
+                <div class="sidebar-item" onclick="selectFolder('trash')">
+                    <span>🗑️</span>
+                    <span>Trash</span>
+                </div>
+            </div>
+            <div class="sidebar-section">
+                <div class="sidebar-header">Labels</div>
+                <div class="sidebar-item" onclick="selectFolder('important')">
+                    <span>⭐</span>
+                    <span>Important</span>
+                </div>
+                <div class="sidebar-item" onclick="selectFolder('work')">
+                    <span>💼</span>
+                    <span>Work</span>
+                </div>
+                <div class="sidebar-item" onclick="selectFolder('personal')">
+                    <span>👤</span>
+                    <span>Personal</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Message List -->
+        <div class="message-list">
+            <div class="message-list-header">Inbox</div>
+            <div class="message-list-content" id="messageList">
+                <!-- Messages will be populated here -->
+            </div>
+        </div>
+
+        <!-- Message Content -->
+        <div class="message-content" id="messageContent">
+            <div class="empty-state">
+                <div class="empty-state-icon">✉️</div>
+                <div class="empty-state-text">No message selected</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Compose Modal -->
+    <div class="compose-modal" id="composeModal">
+        <div class="compose-window">
+            <div class="compose-header">
+                <div class="compose-title">New Message</div>
+                <div class="compose-actions">
+                    <button class="toolbar-button" onclick="sendMessage()">Send</button>
+                    <button class="toolbar-button" onclick="closeCompose()">Cancel</button>
+                </div>
+            </div>
+            <div class="compose-field">
+                <div class="compose-label">To:</div>
+                <input type="email" class="compose-input" id="composeTo" placeholder="recipient@example.com">
+            </div>
+            <div class="compose-field">
+                <div class="compose-label">Subject:</div>
+                <input type="text" class="compose-input" id="composeSubject" placeholder="Subject">
+            </div>
+            <div class="compose-body">
+                <textarea class="compose-textarea" id="composeBody" placeholder="Message"></textarea>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dev Tools -->
+    <div class="dev-tools" id="devTools">
+        <div class="dev-tools-header">
+            <button class="dev-tools-tab active" onclick="switchDevTab('console')">Console</button>
+            <button class="dev-tools-tab" onclick="switchDevTab('smtp')">SMTP Test</button>
+            <button class="dev-tools-tab" onclick="switchDevTab('imap')">IMAP Monitor</button>
+            <button class="dev-tools-tab" onclick="switchDevTab('websocket')">WebSocket</button>
+            <button class="dev-tools-tab" onclick="switchDevTab('api')">API Docs</button>
+            <button class="toolbar-button" onclick="clearDevLog()" style="margin-left: auto;">Clear</button>
+        </div>
+        <div class="dev-tools-content" id="devToolsContent">
+            <div id="devConsole">
+                <!-- Console logs will appear here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let messages = [];
+        let selectedMessage = null;
+        let selectedFolder = 'inbox';
+        let ws = null;
+
+        // Initialize
+        window.addEventListener('load', function() {
+            connectWebSocket();
+            loadSampleMessages();
+            devLog('smtp', 'SMTP Server started on port 25');
+            devLog('imap', 'IMAP Server started on port 143');
+            devLog('ws', 'WebSocket Server started on port 8080');
+        });
+
+        // WebSocket Connection
+        function connectWebSocket() {
+            ws = new WebSocket('ws://localhost:8080/notifications');
+
+            ws.onopen = function() {
+                document.getElementById('statusText').textContent = 'Connected';
+                devLog('ws', 'WebSocket connected');
+
+                // Subscribe to new email events
+                ws.send(JSON.stringify({
+                    action: 'subscribe',
+                    event_type: 'new_email'
+                }));
+            };
+
+            ws.onmessage = function(event) {
+                const notification = JSON.parse(event.data);
+                devLog('ws', 'Notification received: ' + notification.type);
+
+                if (notification.type === 'new_email') {
+                    handleNewEmail(notification.data);
+                }
+            };
+
+            ws.onerror = function(error) {
+                devLog('error', 'WebSocket error: ' + error);
+            };
+
+            ws.onclose = function() {
+                document.getElementById('statusText').textContent = 'Disconnected';
+                devLog('ws', 'WebSocket disconnected');
+
+                // Reconnect after 5 seconds
+                setTimeout(connectWebSocket, 5000);
+            };
+        }
+
+        // Load Sample Messages
+        function loadSampleMessages() {
+            messages = [
+                {
+                    id: 1,
+                    from: 'Team <team@example.com>',
+                    subject: 'Welcome to your new SMTP Server!',
+                    preview: 'We're excited to have you onboard. Your server is now running and ready to send and receive emails.',
+                    time: '10:30 AM',
+                    unread: true,
+                    folder: 'inbox',
+                    body: `<h2>Welcome to your new SMTP Server!</h2>
+                        <p>We're excited to have you onboard. Your server is now running and ready to send and receive emails.</p>
+                        <p>Here's what you can do:</p>
+                        <ul>
+                            <li>Send emails via SMTP (port 25, 587)</li>
+                            <li>Receive emails via IMAP (port 143, 993)</li>
+                            <li>Access via POP3 (port 110, 995)</li>
+                            <li>Sync calendars via CalDAV (port 8008, 8443)</li>
+                            <li>Sync contacts via CardDAV (port 8008, 8443)</li>
+                            <li>Mobile sync via ActiveSync (port 443)</li>
+                            <li>Real-time notifications via WebSocket (port 8080)</li>
+                        </ul>
+                        <p>Happy mailing! 🚀</p>`
+                },
+                {
+                    id: 2,
+                    from: 'GitHub <notifications@github.com>',
+                    subject: '[smtp-server] New pull request',
+                    preview: 'A new pull request has been opened on your repository.',
+                    time: 'Yesterday',
+                    unread: false,
+                    folder: 'inbox',
+                    body: `<p>A new pull request has been opened on your repository.</p>
+                        <p><strong>Title:</strong> Add WebSocket notifications</p>
+                        <p><strong>Author:</strong> developer@example.com</p>
+                        <p>View the pull request on GitHub to review the changes.</p>`
+                },
+                {
+                    id: 3,
+                    from: 'Calendar <calendar@example.com>',
+                    subject: 'Event Reminder: Team Meeting',
+                    preview: 'Your event "Team Meeting" starts in 1 hour.',
+                    time: 'Yesterday',
+                    unread: false,
+                    folder: 'inbox',
+                    body: `<h3>Event Reminder</h3>
+                        <p><strong>Title:</strong> Team Meeting</p>
+                        <p><strong>Time:</strong> Today at 2:00 PM</p>
+                        <p><strong>Location:</strong> Conference Room A</p>
+                        <p>Don't forget to join the meeting!</p>`
+                }
+            ];
+
+            renderMessages();
+            updateMessageCount();
+        }
+
+        // Render Messages
+        function renderMessages() {
+            const messageListEl = document.getElementById('messageList');
+            const folderMessages = messages.filter(m => m.folder === selectedFolder);
+
+            if (folderMessages.length === 0) {
+                messageListEl.innerHTML = '<div class="empty-state"><div class="empty-state-text">No messages</div></div>';
+                return;
+            }
+
+            messageListEl.innerHTML = folderMessages.map(msg => `
+                <div class="message-item ${msg.unread ? 'unread' : ''} ${selectedMessage?.id === msg.id ? 'selected' : ''}"
+                     onclick="selectMessage(${msg.id})">
+                    <div class="message-header">
+                        <div class="message-from">${msg.from}</div>
+                        <div class="message-time">${msg.time}</div>
+                    </div>
+                    <div class="message-subject">${msg.subject}</div>
+                    <div class="message-preview">${msg.preview}</div>
+                </div>
+            `).join('');
+        }
+
+        // Select Message
+        function selectMessage(id) {
+            const message = messages.find(m => m.id === id);
+            if (!message) return;
+
+            selectedMessage = message;
+            message.unread = false;
+
+            const contentEl = document.getElementById('messageContent');
+            contentEl.innerHTML = `
+                <div class="message-content-header">
+                    <div class="message-content-subject">${message.subject}</div>
+                    <div class="message-content-meta">
+                        <div class="message-meta-row">
+                            <div class="message-meta-label">From:</div>
+                            <div class="message-meta-value">${message.from}</div>
+                        </div>
+                        <div class="message-meta-row">
+                            <div class="message-meta-label">Date:</div>
+                            <div class="message-meta-value">${message.time}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="message-content-body">
+                    ${message.body}
+                </div>
+            `;
+
+            renderMessages();
+            updateMessageCount();
+        }
+
+        // Select Folder
+        function selectFolder(folder) {
+            selectedFolder = folder;
+            selectedMessage = null;
+
+            // Update sidebar
+            document.querySelectorAll('.sidebar-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            event.target.closest('.sidebar-item').classList.add('active');
+
+            // Update header
+            document.querySelector('.message-list-header').textContent =
+                folder.charAt(0).toUpperCase() + folder.slice(1);
+
+            // Clear message content
+            document.getElementById('messageContent').innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">✉️</div>
+                    <div class="empty-state-text">No message selected</div>
+                </div>
+            `;
+
+            renderMessages();
+        }
+
+        // Compose
+        function openCompose() {
+            document.getElementById('composeModal').classList.add('active');
+        }
+
+        function closeCompose() {
+            document.getElementById('composeModal').classList.remove('active');
+        }
+
+        function sendMessage() {
+            const to = document.getElementById('composeTo').value;
+            const subject = document.getElementById('composeSubject').value;
+            const body = document.getElementById('composeBody').value;
+
+            if (!to || !subject) {
+                alert('Please fill in To and Subject fields');
+                return;
+            }
+
+            devLog('smtp', `Sending email to ${to}`);
+            devLog('smtp', `Subject: ${subject}`);
+
+            // Simulate sending
+            setTimeout(() => {
+                devLog('smtp', '250 OK: Message accepted for delivery');
+
+                // Add to sent folder
+                messages.push({
+                    id: messages.length + 1,
+                    from: 'Me <me@example.com>',
+                    subject: subject,
+                    preview: body.substring(0, 100),
+                    time: 'Just now',
+                    unread: false,
+                    folder: 'sent',
+                    body: body.replace(/\n/g, '<br>')
+                });
+
+                closeCompose();
+
+                // Clear form
+                document.getElementById('composeTo').value = '';
+                document.getElementById('composeSubject').value = '';
+                document.getElementById('composeBody').value = '';
+
+                updateMessageCount();
+            }, 1000);
+        }
+
+        // Handle New Email (from WebSocket)
+        function handleNewEmail(data) {
+            const newMessage = {
+                id: messages.length + 1,
+                from: data.from,
+                subject: data.subject,
+                preview: 'New message received',
+                time: 'Just now',
+                unread: true,
+                folder: data.folder.toLowerCase(),
+                body: '<p>New message received via SMTP</p>'
+            };
+
+            messages.unshift(newMessage);
+            renderMessages();
+            updateMessageCount();
+
+            // Show notification
+            if (Notification.permission === 'granted') {
+                new Notification('New Email', {
+                    body: `From: ${data.from}\nSubject: ${data.subject}`,
+                    icon: '✉️'
+                });
+            }
+        }
+
+        // Update Message Count
+        function updateMessageCount() {
+            const inboxMessages = messages.filter(m => m.folder === 'inbox');
+            const unreadCount = inboxMessages.filter(m => m.unread).length;
+
+            document.getElementById('inboxCount').textContent = unreadCount;
+            document.getElementById('messageCount').textContent = `${messages.length} messages`;
+        }
+
+        // Refresh Messages
+        function refreshMessages() {
+            devLog('imap', 'FETCH: Fetching latest messages');
+
+            // Simulate refresh
+            setTimeout(() => {
+                devLog('imap', `FETCH: ${messages.length} messages retrieved`);
+                renderMessages();
+            }, 500);
+        }
+
+        // Delete Message
+        function deleteMessage() {
+            if (!selectedMessage) {
+                alert('Please select a message to delete');
+                return;
+            }
+
+            devLog('imap', `DELETE: Moving message ${selectedMessage.id} to trash`);
+            selectedMessage.folder = 'trash';
+            selectedMessage = null;
+
+            document.getElementById('messageContent').innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">✉️</div>
+                    <div class="empty-state-text">No message selected</div>
+                </div>
+            `;
+
+            renderMessages();
+            updateMessageCount();
+        }
+
+        // Search Messages
+        function searchMessages(query) {
+            if (!query) {
+                renderMessages();
+                return;
+            }
+
+            devLog('imap', `SEARCH: Searching for "${query}"`);
+
+            const messageListEl = document.getElementById('messageList');
+            const results = messages.filter(m =>
+                m.subject.toLowerCase().includes(query.toLowerCase()) ||
+                m.from.toLowerCase().includes(query.toLowerCase()) ||
+                m.preview.toLowerCase().includes(query.toLowerCase())
+            );
+
+            if (results.length === 0) {
+                messageListEl.innerHTML = '<div class="empty-state"><div class="empty-state-text">No results</div></div>';
+                devLog('imap', 'SEARCH: 0 results found');
+                return;
+            }
+
+            messageListEl.innerHTML = results.map(msg => `
+                <div class="message-item ${msg.unread ? 'unread' : ''} ${selectedMessage?.id === msg.id ? 'selected' : ''}"
+                     onclick="selectMessage(${msg.id})">
+                    <div class="message-header">
+                        <div class="message-from">${msg.from}</div>
+                        <div class="message-time">${msg.time}</div>
+                    </div>
+                    <div class="message-subject">${msg.subject}</div>
+                    <div class="message-preview">${msg.preview}</div>
+                </div>
+            `).join('');
+
+            devLog('imap', `SEARCH: ${results.length} results found`);
+        }
+
+        // Dev Tools
+        function toggleDevTools() {
+            document.getElementById('devTools').classList.toggle('active');
+        }
+
+        function switchDevTab(tab) {
+            // Update active tab
+            document.querySelectorAll('.dev-tools-tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+
+            const contentEl = document.getElementById('devToolsContent');
+
+            if (tab === 'console') {
+                contentEl.innerHTML = '<div id="devConsole"></div>';
+            } else if (tab === 'smtp') {
+                contentEl.innerHTML = `
+                    <div class="smtp-test-form">
+                        <div class="smtp-test-row">
+                            <label class="smtp-test-label">From:</label>
+                            <input type="email" class="smtp-test-input" id="smtpFrom" value="sender@example.com">
+                        </div>
+                        <div class="smtp-test-row">
+                            <label class="smtp-test-label">To:</label>
+                            <input type="email" class="smtp-test-input" id="smtpTo" value="recipient@example.com">
+                        </div>
+                        <div class="smtp-test-row">
+                            <label class="smtp-test-label">Subject:</label>
+                            <input type="text" class="smtp-test-input" id="smtpSubject" value="Test Email">
+                        </div>
+                        <div class="smtp-test-row">
+                            <label class="smtp-test-label">Body:</label>
+                            <textarea class="smtp-test-input" id="smtpBody" rows="6">This is a test email from the SMTP server.</textarea>
+                        </div>
+                        <button class="smtp-test-button" onclick="testSMTP()">Send Test Email</button>
+                    </div>
+                    <div id="smtpResults"></div>
+                `;
+            } else if (tab === 'imap') {
+                contentEl.innerHTML = '<div style="color: #e8e8ea;">IMAP monitoring - watching for commands...</div>';
+            } else if (tab === 'websocket') {
+                contentEl.innerHTML = `
+                    <div style="color: #e8e8ea;">
+                        <div>WebSocket Status: Connected</div>
+                        <div>URL: ws://localhost:8080/notifications</div>
+                        <div>Subscriptions: new_email, calendar_event_added</div>
+                        <div style="margin-top: 12px; padding: 12px; background: #2d2d2f; border-radius: 4px;">
+                            <div style="color: #8e8e93; margin-bottom: 8px;">Send Test Event:</div>
+                            <button class="smtp-test-button" onclick="sendTestNotification()">Trigger New Email Event</button>
+                        </div>
+                    </div>
+                `;
+            } else if (tab === 'api') {
+                contentEl.innerHTML = `
+                    <div style="color: #e8e8ea;">
+                        <h3 style="margin-bottom: 12px;">API Endpoints</h3>
+
+                        <div style="background: #2d2d2f; padding: 12px; border-radius: 4px; margin-bottom: 12px;">
+                            <div style="color: #34c759; font-weight: bold;">POST /api/send</div>
+                            <div style="color: #8e8e93; font-size: 11px; margin-top: 4px;">Send an email via API</div>
+                            <div style="margin-top: 8px; font-size: 11px;">
+                                <div>Body: { "to": "user@example.com", "subject": "...", "body": "..." }</div>
+                            </div>
+                        </div>
+
+                        <div style="background: #2d2d2f; padding: 12px; border-radius: 4px; margin-bottom: 12px;">
+                            <div style="color: #007aff; font-weight: bold;">GET /api/messages</div>
+                            <div style="color: #8e8e93; font-size: 11px; margin-top: 4px;">List all messages in mailbox</div>
+                            <div style="margin-top: 8px; font-size: 11px;">
+                                <div>Query: ?folder=inbox&limit=50</div>
+                            </div>
+                        </div>
+
+                        <div style="background: #2d2d2f; padding: 12px; border-radius: 4px; margin-bottom: 12px;">
+                            <div style="color: #007aff; font-weight: bold;">GET /api/message/:id</div>
+                            <div style="color: #8e8e93; font-size: 11px; margin-top: 4px;">Get specific message</div>
+                        </div>
+
+                        <div style="background: #2d2d2f; padding: 12px; border-radius: 4px;">
+                            <div style="color: #ff9500; font-weight: bold;">DELETE /api/message/:id</div>
+                            <div style="color: #8e8e93; font-size: 11px; margin-top: 4px;">Delete a message</div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        function devLog(type, message) {
+            const consoleEl = document.getElementById('devConsole');
+            if (!consoleEl) return;
+
+            const time = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = 'dev-log-entry';
+            entry.innerHTML = `
+                <span class="dev-log-time">${time}</span>
+                <span class="dev-log-type ${type}">${type.toUpperCase()}</span>
+                <span>${message}</span>
+            `;
+
+            consoleEl.insertBefore(entry, consoleEl.firstChild);
+
+            // Keep only last 100 entries
+            while (consoleEl.children.length > 100) {
+                consoleEl.removeChild(consoleEl.lastChild);
+            }
+        }
+
+        function clearDevLog() {
+            document.getElementById('devConsole').innerHTML = '';
+        }
+
+        function testSMTP() {
+            const from = document.getElementById('smtpFrom').value;
+            const to = document.getElementById('smtpTo').value;
+            const subject = document.getElementById('smtpSubject').value;
+            const body = document.getElementById('smtpBody').value;
+
+            devLog('smtp', '220 localhost ESMTP');
+            devLog('smtp', `MAIL FROM:<${from}>`);
+            devLog('smtp', '250 OK');
+            devLog('smtp', `RCPT TO:<${to}>`);
+            devLog('smtp', '250 OK');
+            devLog('smtp', 'DATA');
+            devLog('smtp', '354 Start mail input');
+            devLog('smtp', `Subject: ${subject}`);
+            devLog('smtp', body);
+            devLog('smtp', '.');
+            devLog('smtp', '250 OK: Message accepted for delivery');
+
+            // Add to inbox
+            handleNewEmail({
+                from: from,
+                subject: subject,
+                folder: 'INBOX'
+            });
+        }
+
+        function sendTestNotification() {
+            handleNewEmail({
+                from: 'test@example.com',
+                subject: 'Test Notification',
+                folder: 'INBOX'
+            });
+        }
+
+        // Request notification permission
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+    </script>
+</body>
+</html>

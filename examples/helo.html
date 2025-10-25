@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMTP Server - Email Testing & Development</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 48px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .header p {
+            font-size: 20px;
+            opacity: 0.9;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 968px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .card-header {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #1d1d1f;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .card-icon {
+            font-size: 24px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            color: #666;
+            margin-bottom: 6px;
+        }
+
+        .form-input,
+        .form-textarea,
+        .form-select {
+            width: 100%;
+            padding: 10px 14px;
+            border: 2px solid #e5e5ea;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+
+        .form-input:focus,
+        .form-textarea:focus,
+        .form-select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .inbox {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .inbox-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .inbox-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #1d1d1f;
+        }
+
+        .inbox-stats {
+            display: flex;
+            gap: 20px;
+            font-size: 13px;
+            color: #666;
+        }
+
+        .email-list {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .email-item {
+            padding: 16px;
+            border: 2px solid #e5e5ea;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .email-item:hover {
+            border-color: #667eea;
+            background: #f9f9fb;
+        }
+
+        .email-item.unread {
+            background: #f0f4ff;
+            border-color: #667eea;
+        }
+
+        .email-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .email-from {
+            font-weight: 600;
+            color: #1d1d1f;
+        }
+
+        .email-time {
+            font-size: 12px;
+            color: #8e8e93;
+        }
+
+        .email-subject {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 4px;
+        }
+
+        .email-preview {
+            font-size: 13px;
+            color: #8e8e93;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .email-badges {
+            display: flex;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .badge {
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .badge-success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .badge-warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .badge-danger {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .badge-info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #667eea;
+            margin-bottom: 8px;
+        }
+
+        .stat-label {
+            font-size: 13px;
+            color: #666;
+            font-weight: 500;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            max-width: 700px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 32px;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .modal-title {
+            font-size: 24px;
+            font-weight: 600;
+            color: #1d1d1f;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #8e8e93;
+        }
+
+        .close-btn:hover {
+            color: #333;
+        }
+
+        .email-detail {
+            margin-bottom: 20px;
+        }
+
+        .email-detail-row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #e5e5ea;
+        }
+
+        .email-detail-label {
+            font-weight: 600;
+            color: #666;
+            min-width: 80px;
+        }
+
+        .email-detail-value {
+            color: #1d1d1f;
+        }
+
+        .email-body {
+            background: #f9f9fb;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            line-height: 1.6;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e5e5ea;
+        }
+
+        .tab {
+            padding: 12px 20px;
+            background: none;
+            border: none;
+            font-size: 14px;
+            font-weight: 500;
+            color: #666;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .code-block {
+            background: #1d1d1f;
+            color: #e8e8ea;
+            padding: 16px;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+        }
+
+        .template-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        .template-card {
+            padding: 16px;
+            border: 2px solid #e5e5ea;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .template-card:hover {
+            border-color: #667eea;
+            background: #f9f9fb;
+        }
+
+        .template-name {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .template-desc {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #8e8e93;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📧 Email Testing & Development</h1>
+            <p>Test your SMTP server with ease - like Helo.com but better!</p>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="totalSent">0</div>
+                <div class="stat-label">Total Sent</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="totalReceived">0</div>
+                <div class="stat-label">Total Received</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="deliveryRate">100%</div>
+                <div class="stat-label">Delivery Rate</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="avgTime">0ms</div>
+                <div class="stat-label">Avg. Delivery Time</div>
+            </div>
+        </div>
+
+        <!-- Main Grid -->
+        <div class="main-grid">
+            <!-- Send Email Card -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-icon">📤</span>
+                    <span>Send Test Email</span>
+                </div>
+
+                <div class="tabs">
+                    <button class="tab active" onclick="switchTab('simple')">Simple</button>
+                    <button class="tab" onclick="switchTab('advanced')">Advanced</button>
+                    <button class="tab" onclick="switchTab('templates')">Templates</button>
+                </div>
+
+                <!-- Simple Tab -->
+                <div class="tab-content active" id="simpleTab">
+                    <div class="form-group">
+                        <label class="form-label">To:</label>
+                        <input type="email" class="form-input" id="emailTo" placeholder="recipient@example.com">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Subject:</label>
+                        <input type="text" class="form-input" id="emailSubject" placeholder="Test Email">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Message:</label>
+                        <textarea class="form-textarea" id="emailBody" placeholder="Your message here..."></textarea>
+                    </div>
+                    <button class="btn" onclick="sendEmail()">
+                        <span>✉️</span>
+                        <span>Send Email</span>
+                    </button>
+                </div>
+
+                <!-- Advanced Tab -->
+                <div class="tab-content" id="advancedTab">
+                    <div class="form-group">
+                        <label class="form-label">From:</label>
+                        <input type="email" class="form-input" id="emailFromAdv" placeholder="sender@example.com">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">To:</label>
+                        <input type="email" class="form-input" id="emailToAdv" placeholder="recipient@example.com">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">CC:</label>
+                        <input type="email" class="form-input" id="emailCC" placeholder="cc@example.com">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">BCC:</label>
+                        <input type="email" class="form-input" id="emailBCC" placeholder="bcc@example.com">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Subject:</label>
+                        <input type="text" class="form-input" id="emailSubjectAdv" placeholder="Test Email">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Priority:</label>
+                        <select class="form-select" id="emailPriority">
+                            <option value="normal">Normal</option>
+                            <option value="high">High</option>
+                            <option value="low">Low</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Content Type:</label>
+                        <select class="form-select" id="contentType">
+                            <option value="text">Plain Text</option>
+                            <option value="html">HTML</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Message:</label>
+                        <textarea class="form-textarea" id="emailBodyAdv" placeholder="Your message here..."></textarea>
+                    </div>
+                    <button class="btn" onclick="sendAdvancedEmail()">
+                        <span>🚀</span>
+                        <span>Send Advanced Email</span>
+                    </button>
+                </div>
+
+                <!-- Templates Tab -->
+                <div class="tab-content" id="templatesTab">
+                    <div class="template-grid">
+                        <div class="template-card" onclick="useTemplate('welcome')">
+                            <div class="template-name">👋 Welcome</div>
+                            <div class="template-desc">New user welcome email</div>
+                        </div>
+                        <div class="template-card" onclick="useTemplate('reset')">
+                            <div class="template-name">🔒 Password Reset</div>
+                            <div class="template-desc">Password reset link</div>
+                        </div>
+                        <div class="template-card" onclick="useTemplate('invoice')">
+                            <div class="template-name">💰 Invoice</div>
+                            <div class="template-desc">Payment invoice</div>
+                        </div>
+                        <div class="template-card" onclick="useTemplate('newsletter')">
+                            <div class="template-name">📰 Newsletter</div>
+                            <div class="template-desc">Weekly newsletter</div>
+                        </div>
+                        <div class="template-card" onclick="useTemplate('reminder')">
+                            <div class="template-name">⏰ Reminder</div>
+                            <div class="template-desc">Event reminder</div>
+                        </div>
+                        <div class="template-card" onclick="useTemplate('notification')">
+                            <div class="template-name">🔔 Notification</div>
+                            <div class="template-desc">System notification</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Server Status Card -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-icon">🖥️</span>
+                    <span>Server Status</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">SMTP Server:</label>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div style="width: 8px; height: 8px; border-radius: 50%; background: #34c759;"></div>
+                        <span style="color: #34c759; font-weight: 600;">Running</span>
+                        <span style="color: #8e8e93; margin-left: auto;">Port 25, 587</span>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">IMAP Server:</label>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div style="width: 8px; height: 8px; border-radius: 50%; background: #34c759;"></div>
+                        <span style="color: #34c759; font-weight: 600;">Running</span>
+                        <span style="color: #8e8e93; margin-left: auto;">Port 143, 993</span>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">WebSocket:</label>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div style="width: 8px; height: 8px; border-radius: 50%; background: #34c759;"></div>
+                        <span style="color: #34c759; font-weight: 600;">Connected</span>
+                        <span style="color: #8e8e93; margin-left: auto;">Port 8080</span>
+                    </div>
+                </div>
+
+                <div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid #e5e5ea;">
+                    <div class="card-header" style="margin-bottom: 16px;">
+                        <span class="card-icon">⚡</span>
+                        <span>Quick Actions</span>
+                    </div>
+
+                    <button class="btn" style="width: 100%; margin-bottom: 8px;" onclick="sendBulkEmails()">
+                        <span>📬</span>
+                        <span>Send Bulk Emails (10x)</span>
+                    </button>
+
+                    <button class="btn btn-secondary" style="width: 100%; margin-bottom: 8px;" onclick="clearInbox()">
+                        <span>🗑️</span>
+                        <span>Clear Inbox</span>
+                    </button>
+
+                    <button class="btn btn-secondary" style="width: 100%;" onclick="exportLogs()">
+                        <span>📊</span>
+                        <span>Export Logs</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Inbox -->
+        <div class="inbox">
+            <div class="inbox-header">
+                <div class="inbox-title">📥 Inbox</div>
+                <div class="inbox-stats">
+                    <span><strong id="emailCount">0</strong> emails</span>
+                    <span><strong id="unreadCount">0</strong> unread</span>
+                </div>
+            </div>
+
+            <div class="email-list" id="emailList">
+                <div class="loading">No emails yet. Send a test email to get started!</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Email Detail Modal -->
+    <div class="modal" id="emailModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title" id="modalSubject">Email Details</div>
+                <button class="close-btn" onclick="closeModal()">×</button>
+            </div>
+
+            <div class="email-detail" id="emailDetail">
+                <!-- Email details will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let emails = [];
+        let stats = {
+            sent: 0,
+            received: 0,
+            deliveryRate: 100,
+            avgTime: 0
+        };
+        let ws = null;
+
+        // Initialize
+        window.addEventListener('load', function() {
+            connectWebSocket();
+            updateStats();
+        });
+
+        // WebSocket Connection
+        function connectWebSocket() {
+            ws = new WebSocket('ws://localhost:8080/notifications');
+
+            ws.onopen = function() {
+                console.log('WebSocket connected');
+                ws.send(JSON.stringify({
+                    action: 'subscribe',
+                    event_type: '*'
+                }));
+            };
+
+            ws.onmessage = function(event) {
+                const notification = JSON.parse(event.data);
+
+                if (notification.type === 'new_email') {
+                    handleNewEmail(notification.data);
+                }
+            };
+
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+            };
+
+            ws.onclose = function() {
+                setTimeout(connectWebSocket, 5000);
+            };
+        }
+
+        // Tab Switching
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+            event.target.classList.add('active');
+            document.getElementById(tab + 'Tab').classList.add('active');
+        }
+
+        // Send Simple Email
+        function sendEmail() {
+            const to = document.getElementById('emailTo').value;
+            const subject = document.getElementById('emailSubject').value;
+            const body = document.getElementById('emailBody').value;
+
+            if (!to || !subject) {
+                alert('Please fill in To and Subject fields');
+                return;
+            }
+
+            const email = {
+                id: emails.length + 1,
+                from: 'test@localhost',
+                to: to,
+                subject: subject,
+                body: body,
+                time: new Date().toLocaleString(),
+                unread: true,
+                deliveryTime: Math.floor(Math.random() * 200) + 50
+            };
+
+            sendEmailToServer(email);
+        }
+
+        // Send Advanced Email
+        function sendAdvancedEmail() {
+            const from = document.getElementById('emailFromAdv').value;
+            const to = document.getElementById('emailToAdv').value;
+            const cc = document.getElementById('emailCC').value;
+            const bcc = document.getElementById('emailBCC').value;
+            const subject = document.getElementById('emailSubjectAdv').value;
+            const priority = document.getElementById('emailPriority').value;
+            const contentType = document.getElementById('contentType').value;
+            const body = document.getElementById('emailBodyAdv').value;
+
+            if (!to || !subject) {
+                alert('Please fill in To and Subject fields');
+                return;
+            }
+
+            const email = {
+                id: emails.length + 1,
+                from: from || 'test@localhost',
+                to: to,
+                cc: cc,
+                bcc: bcc,
+                subject: subject,
+                body: body,
+                priority: priority,
+                contentType: contentType,
+                time: new Date().toLocaleString(),
+                unread: true,
+                deliveryTime: Math.floor(Math.random() * 200) + 50
+            };
+
+            sendEmailToServer(email);
+        }
+
+        // Send Email to Server
+        function sendEmailToServer(email) {
+            // Simulate sending
+            emails.unshift(email);
+            stats.sent++;
+            stats.received++;
+            stats.avgTime = Math.floor((stats.avgTime * (stats.sent - 1) + email.deliveryTime) / stats.sent);
+
+            renderEmails();
+            updateStats();
+
+            // Show success message
+            alert(`Email sent successfully!\nDelivery time: ${email.deliveryTime}ms`);
+
+            // Clear form
+            document.getElementById('emailTo').value = '';
+            document.getElementById('emailSubject').value = '';
+            document.getElementById('emailBody').value = '';
+        }
+
+        // Handle New Email from WebSocket
+        function handleNewEmail(data) {
+            const email = {
+                id: emails.length + 1,
+                from: data.from,
+                to: data.to || 'you@localhost',
+                subject: data.subject,
+                body: 'New email received',
+                time: new Date().toLocaleString(),
+                unread: true,
+                deliveryTime: Math.floor(Math.random() * 200) + 50
+            };
+
+            emails.unshift(email);
+            stats.received++;
+
+            renderEmails();
+            updateStats();
+
+            // Show notification
+            if (Notification.permission === 'granted') {
+                new Notification('New Email Received', {
+                    body: `From: ${data.from}\nSubject: ${data.subject}`,
+                    icon: '📧'
+                });
+            }
+        }
+
+        // Render Emails
+        function renderEmails() {
+            const listEl = document.getElementById('emailList');
+
+            if (emails.length === 0) {
+                listEl.innerHTML = '<div class="loading">No emails yet. Send a test email to get started!</div>';
+                return;
+            }
+
+            listEl.innerHTML = emails.map(email => `
+                <div class="email-item ${email.unread ? 'unread' : ''}" onclick="viewEmail(${email.id})">
+                    <div class="email-header">
+                        <div class="email-from">${email.from}</div>
+                        <div class="email-time">${email.time}</div>
+                    </div>
+                    <div class="email-subject">${email.subject}</div>
+                    <div class="email-preview">${email.body.substring(0, 100)}</div>
+                    <div class="email-badges">
+                        <span class="badge badge-success">Delivered</span>
+                        <span class="badge badge-info">${email.deliveryTime}ms</span>
+                        ${email.priority === 'high' ? '<span class="badge badge-danger">High Priority</span>' : ''}
+                    </div>
+                </div>
+            `).join('');
+
+            updateStats();
+        }
+
+        // View Email
+        function viewEmail(id) {
+            const email = emails.find(e => e.id === id);
+            if (!email) return;
+
+            email.unread = false;
+
+            document.getElementById('modalSubject').textContent = email.subject;
+            document.getElementById('emailDetail').innerHTML = `
+                <div class="email-detail-row">
+                    <div class="email-detail-label">From:</div>
+                    <div class="email-detail-value">${email.from}</div>
+                </div>
+                <div class="email-detail-row">
+                    <div class="email-detail-label">To:</div>
+                    <div class="email-detail-value">${email.to}</div>
+                </div>
+                ${email.cc ? `
+                <div class="email-detail-row">
+                    <div class="email-detail-label">CC:</div>
+                    <div class="email-detail-value">${email.cc}</div>
+                </div>` : ''}
+                <div class="email-detail-row">
+                    <div class="email-detail-label">Subject:</div>
+                    <div class="email-detail-value">${email.subject}</div>
+                </div>
+                <div class="email-detail-row">
+                    <div class="email-detail-label">Date:</div>
+                    <div class="email-detail-value">${email.time}</div>
+                </div>
+                <div class="email-detail-row">
+                    <div class="email-detail-label">Delivery:</div>
+                    <div class="email-detail-value">${email.deliveryTime}ms</div>
+                </div>
+                <div class="email-body">${email.body.replace(/\n/g, '<br>')}</div>
+            `;
+
+            document.getElementById('emailModal').classList.add('active');
+            renderEmails();
+        }
+
+        // Close Modal
+        function closeModal() {
+            document.getElementById('emailModal').classList.remove('active');
+        }
+
+        // Update Stats
+        function updateStats() {
+            document.getElementById('totalSent').textContent = stats.sent;
+            document.getElementById('totalReceived').textContent = stats.received;
+            document.getElementById('deliveryRate').textContent = stats.deliveryRate + '%';
+            document.getElementById('avgTime').textContent = stats.avgTime + 'ms';
+            document.getElementById('emailCount').textContent = emails.length;
+            document.getElementById('unreadCount').textContent = emails.filter(e => e.unread).length;
+        }
+
+        // Use Template
+        function useTemplate(template) {
+            const templates = {
+                welcome: {
+                    subject: 'Welcome to Our Platform!',
+                    body: `Hi there!\n\nWelcome to our amazing platform. We're excited to have you onboard.\n\nGet started by exploring our features and setting up your account.\n\nBest regards,\nThe Team`
+                },
+                reset: {
+                    subject: 'Password Reset Request',
+                    body: `Hi,\n\nWe received a request to reset your password.\n\nClick here to reset: https://example.com/reset?token=abc123\n\nIf you didn't request this, please ignore this email.\n\nBest regards,\nSecurity Team`
+                },
+                invoice: {
+                    subject: 'Your Invoice #12345',
+                    body: `Hi,\n\nThank you for your purchase!\n\nInvoice #12345\nAmount: $99.00\nDate: ${new Date().toLocaleDateString()}\n\nView full invoice: https://example.com/invoice/12345\n\nBest regards,\nBilling Team`
+                },
+                newsletter: {
+                    subject: '📰 Weekly Newsletter - Week ' + new Date().getWeek(),
+                    body: `Hello!\n\nHere's what's new this week:\n\n1. New feature releases\n2. Product updates\n3. Community highlights\n\nRead more: https://example.com/newsletter\n\nHave a great week!\nThe Team`
+                },
+                reminder: {
+                    subject: '⏰ Reminder: Upcoming Event',
+                    body: `Hi,\n\nThis is a friendly reminder about your upcoming event:\n\nEvent: Team Meeting\nDate: ${new Date().toLocaleDateString()}\nTime: 2:00 PM\nLocation: Conference Room A\n\nSee you there!\nCalendar Bot`
+                },
+                notification: {
+                    subject: '🔔 New Notification',
+                    body: `Hi,\n\nYou have a new notification:\n\nType: System Update\nMessage: Your account has been upgraded to Premium!\n\nEnjoy your new features.\n\nBest regards,\nSystem`
+                }
+            };
+
+            const tpl = templates[template];
+            if (!tpl) return;
+
+            document.getElementById('emailSubject').value = tpl.subject;
+            document.getElementById('emailBody').value = tpl.body;
+
+            // Switch to simple tab
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.querySelectorAll('.tab')[0].classList.add('active');
+            document.getElementById('simpleTab').classList.add('active');
+        }
+
+        // Send Bulk Emails
+        function sendBulkEmails() {
+            if (!confirm('Send 10 test emails?')) return;
+
+            for (let i = 1; i <= 10; i++) {
+                setTimeout(() => {
+                    const email = {
+                        id: emails.length + 1,
+                        from: `sender${i}@example.com`,
+                        to: 'you@localhost',
+                        subject: `Bulk Email #${i}`,
+                        body: `This is bulk email number ${i} sent at ${new Date().toLocaleString()}`,
+                        time: new Date().toLocaleString(),
+                        unread: true,
+                        deliveryTime: Math.floor(Math.random() * 200) + 50
+                    };
+
+                    emails.unshift(email);
+                    stats.sent++;
+                    stats.received++;
+
+                    renderEmails();
+                    updateStats();
+                }, i * 100);
+            }
+        }
+
+        // Clear Inbox
+        function clearInbox() {
+            if (!confirm('Clear all emails?')) return;
+
+            emails = [];
+            renderEmails();
+            updateStats();
+        }
+
+        // Export Logs
+        function exportLogs() {
+            const log = {
+                timestamp: new Date().toISOString(),
+                stats: stats,
+                emails: emails
+            };
+
+            const blob = new Blob([JSON.stringify(log, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `smtp-logs-${Date.now()}.json`;
+            a.click();
+        }
+
+        // Helper: Get week number
+        Date.prototype.getWeek = function() {
+            const d = new Date(Date.UTC(this.getFullYear(), this.getMonth(), this.getDate()));
+            const dayNum = d.getUTCDay() || 7;
+            d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+            const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+            return Math.ceil((((d - yearStart) / 86400000) + 1)/7);
+        };
+
+        // Request notification permission
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+    </script>
+</body>
+</html>
