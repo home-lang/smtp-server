@@ -28,12 +28,20 @@ pub const LogLevel = enum {
     }
 };
 
+pub const LogFormat = enum {
+    text,
+    json,
+};
+
 pub const Logger = struct {
     allocator: std.mem.Allocator,
     min_level: LogLevel,
     use_colors: bool,
     log_file: ?std.fs.File,
     mutex: std.Thread.Mutex,
+    format: LogFormat,
+    service_name: []const u8,
+    hostname: []const u8,
 
     pub fn init(allocator: std.mem.Allocator, min_level: LogLevel, log_file_path: ?[]const u8) !Logger {
         var log_file: ?std.fs.File = null;
@@ -46,19 +54,35 @@ pub const Logger = struct {
             try log_file.?.seekFromEnd(0);
         }
 
+        // Get hostname
+        var hostname_buf: [256]u8 = undefined;
+        const hostname = std.posix.gethostname(&hostname_buf) catch "unknown";
+
         return Logger{
             .allocator = allocator,
             .min_level = min_level,
             .use_colors = true,
             .log_file = log_file,
             .mutex = std.Thread.Mutex{},
+            .format = .text, // Default to text format
+            .service_name = try allocator.dupe(u8, "smtp-server"),
+            .hostname = try allocator.dupe(u8, hostname),
         };
+    }
+
+    pub fn initWithFormat(allocator: std.mem.Allocator, min_level: LogLevel, log_file_path: ?[]const u8, format: LogFormat) !Logger {
+        var logger = try init(allocator, min_level, log_file_path);
+        logger.format = format;
+        logger.use_colors = (format == .text); // Only use colors in text mode
+        return logger;
     }
 
     pub fn deinit(self: *Logger) void {
         if (self.log_file) |file| {
             file.close();
         }
+        self.allocator.free(self.service_name);
+        self.allocator.free(self.hostname);
     }
 
     pub fn log(self: *Logger, level: LogLevel, comptime fmt: []const u8, args: anytype) void {
@@ -76,16 +100,18 @@ pub const Logger = struct {
             return;
         };
 
-        // Create log entry
         var log_buf: [8192]u8 = undefined;
-        const log_entry = std.fmt.bufPrint(&log_buf, "[{d}] [{s}] {s}\n", .{
-            timestamp,
-            level.toString(),
-            message,
-        }) catch return;
+        const log_entry = switch (self.format) {
+            .text => std.fmt.bufPrint(&log_buf, "[{d}] [{s}] {s}\n", .{
+                timestamp,
+                level.toString(),
+                message,
+            }) catch return,
+            .json => self.formatJSON(&log_buf, timestamp, level, message, null) catch return,
+        };
 
-        // Write to stderr with colors
-        if (self.use_colors) {
+        // Write to stderr with colors (text mode only)
+        if (self.use_colors and self.format == .text) {
             const colored = std.fmt.bufPrint(&buf, "{s}{s}\x1b[0m", .{
                 level.toColor(),
                 log_entry,
@@ -98,6 +124,65 @@ pub const Logger = struct {
         // Write to file if configured
         if (self.log_file) |file| {
             _ = file.write(log_entry) catch {};
+        }
+    }
+
+    /// Format log entry as JSON
+    fn formatJSON(
+        self: *Logger,
+        buf: []u8,
+        timestamp: i64,
+        level: LogLevel,
+        message: []const u8,
+        fields: ?std.StringHashMap([]const u8),
+    ) ![]const u8 {
+        var stream = std.io.fixedBufferStream(buf);
+        var writer = stream.writer();
+
+        try writer.writeAll("{\"timestamp\":");
+        try std.fmt.formatInt(timestamp, 10, .lower, .{}, writer);
+        try writer.writeAll(",\"level\":\"");
+        try writer.writeAll(level.toString());
+        try writer.writeAll("\",\"service\":\"");
+        try writer.writeAll(self.service_name);
+        try writer.writeAll("\",\"hostname\":\"");
+        try writer.writeAll(self.hostname);
+        try writer.writeAll("\",\"message\":\"");
+        try self.escapeJSON(writer, message);
+        try writer.writeAll("\"");
+
+        // Add custom fields if provided
+        if (fields) |f| {
+            var it = f.iterator();
+            while (it.next()) |entry| {
+                try writer.writeAll(",\"");
+                try writer.writeAll(entry.key_ptr.*);
+                try writer.writeAll("\":\"");
+                try self.escapeJSON(writer, entry.value_ptr.*);
+                try writer.writeAll("\"");
+            }
+        }
+
+        try writer.writeAll("}\n");
+        return stream.getWritten();
+    }
+
+    /// Escape special characters for JSON
+    fn escapeJSON(self: *Logger, writer: anytype, str: []const u8) !void {
+        _ = self;
+        for (str) |c| {
+            switch (c) {
+                '"' => try writer.writeAll("\\\""),
+                '\\' => try writer.writeAll("\\\\"),
+                '\n' => try writer.writeAll("\\n"),
+                '\r' => try writer.writeAll("\\r"),
+                '\t' => try writer.writeAll("\\t"),
+                else => if (c < 32) {
+                    try writer.print("\\u{x:0>4}", .{c});
+                } else {
+                    try writer.writeByte(c);
+                },
+            }
         }
     }
 

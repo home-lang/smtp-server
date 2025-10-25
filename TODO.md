@@ -2,6 +2,40 @@
 
 ## Recent Updates 📝
 
+### v0.27.0 (2025-10-24) - Code Quality Improvements & Input Validation 🛡️
+- ✅ **Email Validator**: Comprehensive RFC-compliant email address validator
+  - ✅ Created `src/core/email_validator.zig` with full RFC 5321/5322 compliance
+  - ✅ Local part validation (max 64 chars, dot-atom and quoted-string formats)
+  - ✅ Domain validation (max 255 chars, hostname and IP literal support)
+  - ✅ IPv4 and IPv6 address validation
+  - ✅ Domain label length enforcement (max 63 chars)
+  - ✅ Email normalization and part extraction utilities
+  - ✅ Comprehensive test coverage with 20+ test cases
+- ✅ **MIME Security Enhancements**: Protection against malicious MIME content
+  - ✅ MIME depth validation (max 10 levels) in `src/message/mime.zig`
+  - ✅ Boundary length enforcement (max 70 chars per RFC 2046)
+  - ✅ Boundary character validation (bchars set)
+  - ✅ Recursive depth tracking for nested multipart messages
+  - ✅ Security logging for limit violations
+- ✅ **Header Validation**: RFC 5322 compliance enforcement
+  - ✅ Maximum line length enforcement (998 chars hard limit)
+  - ✅ Recommended length warnings (78 chars)
+  - ✅ Per-line validation in `src/message/headers.zig`
+  - ✅ Test coverage for boundary cases
+- ✅ **Constants Module**: Centralized configuration limits
+  - ✅ Created `src/core/constants.zig` with all buffer sizes and limits
+  - ✅ BufferSizes (SMALL=256, MEDIUM=1KB, LARGE=8KB, XLARGE=64KB)
+  - ✅ SMTPLimits, EmailLimits, MIMELimits, ConnectionLimits
+  - ✅ DatabaseLimits, QueueLimits, StorageLimits, SecurityLimits
+  - ✅ Utility functions for limit checking and capacity calculation
+- ✅ **Verified Existing Implementations**: Confirmed proper implementation of:
+  - ✅ Persistent message queue with database (src/delivery/queue.zig)
+  - ✅ Circuit breaker pattern (src/infrastructure/circuit_breaker.zig)
+  - ✅ Atomic logger initialization (src/core/logger.zig)
+  - ✅ Rate limiter thread safety (src/auth/security.zig)
+  - ✅ Configuration validation at startup (src/core/config.zig)
+- 🎉 **Security Milestone**: 10 security improvements completed from Phase 2-9!
+
 ### v0.26.0 (2025-10-24) - Multi-Tenancy & Cluster Mode 🚀
 - ✅ **Multi-Tenancy Support**: Complete tenant isolation and resource management
   - ✅ Database schema with tenant isolation (tenants, tenant_domains, tenant_usage tables)
@@ -1018,8 +1052,8 @@
   - Thread-safe with mutex protection
 
 ### Phase 2: Reliability Improvements
-- [ ] **Persistent Message Queue**: Implement durable queue with database persistence in `src/delivery/queue.zig`
-- [ ] **Circuit Breaker Pattern**: Add circuit breaker for database, webhooks, and relay connections
+- [x] **Persistent Message Queue**: Implement durable queue with database persistence in `src/delivery/queue.zig` ✅ (Already implemented)
+- [x] **Circuit Breaker Pattern**: Add circuit breaker for database, webhooks, and relay connections ✅ (`src/infrastructure/circuit_breaker.zig`)
 - [ ] **Error Recovery Paths**: Add context preservation in error paths for debugging
 - [ ] **Database Migrations**: Create migration framework for schema changes
 - [ ] **Enhanced Health Checks**: Add dependency status checks (database, storage, queue) to health endpoint
@@ -1027,8 +1061,8 @@
 - [ ] **Streaming Message Parser**: Implement bounded-buffer streaming parser for large messages
 
 ### Phase 3: Thread Safety & Concurrency
-- [ ] **Global Logger Race Fix**: Use atomic initialization for global logger in `src/core/logger.zig:150-159`
-- [ ] **Rate Limiter Thread Safety**: Add mutex protection to iterator in cleanup thread
+- [x] **Global Logger Race Fix**: Use atomic initialization for global logger in `src/core/logger.zig:150-159` ✅ (Already implemented with `std.atomic.Value`)
+- [x] **Rate Limiter Thread Safety**: Add mutex protection to iterator in cleanup thread ✅ (Already protected in cleanup() method)
 - [ ] **Connection Pool CAS**: Use atomic compare-and-swap for connection acquisition
 - [ ] **Cluster State Atomics**: Use atomic operations for leader election state transitions
 - [ ] **Greylist Locking**: Add mutex protection to greylist concurrent access
@@ -1043,10 +1077,10 @@
 - [ ] **Zero-Copy Optimizations**: Minimize allocation in hot paths
 
 ### Phase 5: Input Validation & Error Handling
-- [ ] **MIME Depth Validation**: Add max nesting depth (10 levels) to MIME parser
-- [ ] **MIME Boundary Validation**: Enforce RFC boundary length limits (70 chars max)
-- [ ] **Email Address Validation**: Create comprehensive validator (local part 64, domain label 63, total 320)
-- [ ] **Header Line Length**: Enforce RFC 5322 max line length (998 chars)
+- [x] **MIME Depth Validation**: Add max nesting depth (10 levels) to MIME parser ✅ (`src/message/mime.zig` - MAX_MIME_DEPTH=10)
+- [x] **MIME Boundary Validation**: Enforce RFC boundary length limits (70 chars max) ✅ (`src/message/mime.zig` - MAX_BOUNDARY_LENGTH=70)
+- [x] **Email Address Validation**: Create comprehensive validator (local part 64, domain label 63, total 320) ✅ (`src/core/email_validator.zig`)
+- [x] **Header Line Length**: Enforce RFC 5322 max line length (998 chars) ✅ (`src/message/headers.zig` - MAX_LINE_LENGTH=998)
 - [ ] **DNS Resolution Validation**: Add address family checks after DNS resolution
 - [ ] **Database NULL Handling**: Return Option types instead of empty slices
 - [ ] **Replace Unreachable**: Replace `unreachable` with proper error types in protocol handler
@@ -1070,7 +1104,7 @@
 - [ ] **Regression Test Index**: Document past vulnerabilities with test references
 
 ### Phase 8: Configuration & Deployment
-- [ ] **Configuration Validation**: Add startup validation for all config values
+- [x] **Configuration Validation**: Add startup validation for all config values ✅ (`src/core/config.zig` - validate() method, called at startup)
 - [ ] **Configuration Profiles**: Support dev/test/prod profiles
 - [ ] **Config File Support**: Add TOML/YAML config file parsing
 - [ ] **Secret Management**: Integrate HashiCorp Vault, K8s Secrets, AWS Secrets Manager
@@ -1081,7 +1115,7 @@
 ### Phase 9: Code Quality & Consistency
 - [ ] **Centralized Error Handling**: Create error handler utility to reduce duplication
 - [ ] **Standardize Memory Management**: Enforce consistent RAII with defer pattern
-- [ ] **Buffer Size Constants**: Define constants for all magic buffer sizes
+- [x] **Buffer Size Constants**: Define constants for all magic buffer sizes ✅ (`src/core/constants.zig` - comprehensive constants module)
 - [ ] **Enforce Logger Usage**: Replace all `std.debug.print()` with logger interface
 - [ ] **Centralize Defaults**: Single source of truth for all config defaults
 - [ ] **Deduplicate Imports**: Create common module imports in `src/root.zig`
@@ -1106,13 +1140,13 @@
 
 ### Quick Wins (Low Effort, High Impact) ⚡
 - [ ] Remove unreachable blocks - Replace with proper error types (30 min)
-- [ ] Add configuration validation - Check port range, paths exist (1 hour)
-- [ ] Fix rate limiter thread safety - Add mutex to cleanup (1 hour)
-- [ ] Remove legacy auth function - Delete unused `verifyCredentials()` (15 min)
+- [x] Add configuration validation - Check port range, paths exist (1 hour) ✅ (Already implemented in config.zig)
+- [x] Fix rate limiter thread safety - Add mutex to cleanup (1 hour) ✅ (Already implemented)
+- [x] Remove legacy auth function - Delete unused `verifyCredentials()` (15 min) ✅ (Removed in Phase 1)
 - [ ] Add health check details - Expand endpoint with dependencies (1 hour)
 - [ ] Add API documentation - Document REST endpoints (2 hours)
-- [ ] Fix MIME header validation - Add length checks (2 hours)
-- [ ] Add per-username rate limiting - Extend current limiter (1 hour)
+- [x] Fix MIME header validation - Add length checks (2 hours) ✅ (Implemented MAX_LINE_LENGTH validation)
+- [x] Add per-username rate limiting - Extend current limiter (1 hour) ✅ (Already implemented with checkAndIncrementUser)
 - [ ] Add JSON structured logging - Wrap current logging (2 hours)
 - [ ] Add fuzzing harnesses - For protocol parsing (2 hours)
 

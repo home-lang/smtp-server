@@ -119,13 +119,49 @@ pub const MimePart = struct {
 /// MIME multipart parser
 pub const MultipartParser = struct {
     allocator: std.mem.Allocator,
+    max_depth: u32,
+    current_depth: u32,
+
+    pub const MAX_MIME_DEPTH = 10; // RFC recommendation
+    pub const MAX_BOUNDARY_LENGTH = 70; // RFC 2046 limit
 
     pub fn init(allocator: std.mem.Allocator) MultipartParser {
-        return .{ .allocator = allocator };
+        return .{
+            .allocator = allocator,
+            .max_depth = MAX_MIME_DEPTH,
+            .current_depth = 0,
+        };
     }
 
     /// Parse a multipart message body given a boundary
     pub fn parse(self: *MultipartParser, body: []const u8, boundary: []const u8) ![]MimePart {
+        // Validate MIME depth
+        if (self.current_depth >= self.max_depth) {
+            std.log.err("MIME depth limit exceeded: {d} (max: {d})", .{ self.current_depth, self.max_depth });
+            return error.MimeDepthExceeded;
+        }
+
+        // Validate boundary length per RFC 2046
+        if (boundary.len > MAX_BOUNDARY_LENGTH) {
+            std.log.err("MIME boundary too long: {d} bytes (max: {d})", .{ boundary.len, MAX_BOUNDARY_LENGTH });
+            return error.BoundaryTooLong;
+        }
+
+        // Validate boundary characters (RFC 2046: must be 1-70 characters from bchars set)
+        for (boundary) |c| {
+            const is_valid = std.ascii.isAlphanumeric(c) or
+                c == '\'' or c == '(' or c == ')' or c == '+' or c == '_' or
+                c == ',' or c == '-' or c == '.' or c == '/' or c == ':' or
+                c == '=' or c == '?';
+            if (!is_valid) {
+                std.log.err("Invalid character in MIME boundary: 0x{x}", .{c});
+                return error.InvalidBoundary;
+            }
+        }
+
+        self.current_depth += 1;
+        defer self.current_depth -= 1;
+
         var parts = std.ArrayList(MimePart).init(self.allocator);
         errdefer {
             for (parts.items) |*part| {
@@ -164,6 +200,21 @@ pub const MultipartParser = struct {
 
             // Parse this part
             var part = try self.parsePart(part_data);
+            errdefer part.deinit();
+
+            // Check if this part is itself multipart and recursively parse
+            if (part.content_type) |*ct| {
+                if (ct.isMultipart() and ct.boundary != null) {
+                    // Recursively parse nested multipart (depth tracking happens in parse())
+                    const nested_parts = self.parse(part.body, ct.boundary.?) catch |err| {
+                        std.log.err("Failed to parse nested multipart: {}", .{err});
+                        return err;
+                    };
+                    // Free nested parts (just demonstrating depth tracking works)
+                    self.freeParts(nested_parts);
+                }
+            }
+
             try parts.append(part);
 
             pos += next_boundary;
@@ -295,4 +346,47 @@ test "parse simple multipart message" {
     try testing.expect(parts[1].content_type != null);
     try testing.expectEqualStrings("text", parts[1].content_type.?.media_type);
     try testing.expectEqualStrings("html", parts[1].content_type.?.media_subtype);
+}
+
+test "reject boundary longer than 70 characters" {
+    const testing = std.testing;
+    var parser = MultipartParser.init(testing.allocator);
+
+    // Create a boundary that's 71 characters (too long)
+    const long_boundary = "a" ** 71;
+    const message = "--" ++ long_boundary ++ "\r\ntest\r\n--" ++ long_boundary ++ "--";
+
+    const result = parser.parse(message, long_boundary);
+    try testing.expectError(error.BoundaryTooLong, result);
+}
+
+test "reject invalid boundary characters" {
+    const testing = std.testing;
+    var parser = MultipartParser.init(testing.allocator);
+
+    // Boundary with invalid character (space)
+    const invalid_boundary = "test boundary";
+    const message = "--test boundary\r\ntest\r\n--test boundary--";
+
+    const result = parser.parse(message, invalid_boundary);
+    try testing.expectError(error.InvalidBoundary, result);
+}
+
+test "reject MIME depth exceeding 10 levels" {
+    const testing = std.testing;
+    var parser = MultipartParser.init(testing.allocator);
+
+    // Simulate depth exceeded by setting current_depth
+    parser.current_depth = 10;
+
+    const message =
+        \\--boundary
+        \\Content-Type: text/plain
+        \\
+        \\test
+        \\--boundary--
+    ;
+
+    const result = parser.parse(message, "boundary");
+    try testing.expectError(error.MimeDepthExceeded, result);
 }

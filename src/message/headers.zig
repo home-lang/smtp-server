@@ -4,6 +4,10 @@ const std = @import("std");
 pub const HeaderParser = struct {
     allocator: std.mem.Allocator,
 
+    /// RFC 5322 line length limits
+    pub const MAX_LINE_LENGTH = 998; // Hard limit
+    pub const RECOMMENDED_LINE_LENGTH = 78; // Recommended limit
+
     pub fn init(allocator: std.mem.Allocator) HeaderParser {
         return .{ .allocator = allocator };
     }
@@ -29,6 +33,17 @@ pub const HeaderParser = struct {
         while (lines.next()) |line| {
             // Empty line marks end of headers
             if (line.len == 0) break;
+
+            // Validate line length per RFC 5322
+            if (line.len > MAX_LINE_LENGTH) {
+                std.log.err("Header line exceeds maximum length: {d} bytes (max: {d})", .{ line.len, MAX_LINE_LENGTH });
+                return error.HeaderLineTooLong;
+            }
+
+            // Warn if exceeding recommended length
+            if (line.len > RECOMMENDED_LINE_LENGTH) {
+                std.log.warn("Header line exceeds recommended length: {d} bytes (recommended: {d})", .{ line.len, RECOMMENDED_LINE_LENGTH });
+            }
 
             // Check if this is a continuation line (starts with whitespace)
             if (line.len > 0 and (line[0] == ' ' or line[0] == '\t')) {
@@ -227,4 +242,49 @@ test "validate required headers" {
     // Add Date header
     try headers.put("Date", "Mon, 1 Jan 2024 00:00:00 +0000");
     try parser.validateHeaders(&headers);
+}
+
+test "reject header lines exceeding 998 characters" {
+    const testing = std.testing;
+    var parser = HeaderParser.init(testing.allocator);
+
+    // Create a header line that's 999 characters (too long)
+    var long_header = try testing.allocator.alloc(u8, 999);
+    defer testing.allocator.free(long_header);
+
+    // Fill with valid header format: "X-Long: " + 991 'a' characters
+    const header_name = "X-Long: ";
+    @memcpy(long_header[0..header_name.len], header_name);
+    @memset(long_header[header_name.len..], 'a');
+
+    // Append newlines
+    var data = try std.fmt.allocPrint(testing.allocator, "{s}\r\n\r\n", .{long_header});
+    defer testing.allocator.free(data);
+
+    const result = parser.parseHeaders(data);
+    try testing.expectError(error.HeaderLineTooLong, result);
+}
+
+test "accept header lines at 998 character limit" {
+    const testing = std.testing;
+    var parser = HeaderParser.init(testing.allocator);
+
+    // Create a header line that's exactly 998 characters (at limit)
+    var long_header = try testing.allocator.alloc(u8, 998);
+    defer testing.allocator.free(long_header);
+
+    // Fill with valid header format
+    const header_name = "X-Long: ";
+    @memcpy(long_header[0..header_name.len], header_name);
+    @memset(long_header[header_name.len..], 'a');
+
+    // Append newlines and From/Date for validation
+    var data = try std.fmt.allocPrint(testing.allocator, "{s}\r\nFrom: test@example.com\r\nDate: Mon, 1 Jan 2024 00:00:00 +0000\r\n\r\n", .{long_header});
+    defer testing.allocator.free(data);
+
+    var headers = try parser.parseHeaders(data);
+    defer parser.freeHeaders(&headers);
+
+    // Should succeed
+    try testing.expect(headers.count() > 0);
 }
