@@ -105,7 +105,25 @@
   - Request/response examples with curl
   - CSRF protection workflow
   - Error handling and rate limiting
-- 🎉 **Major Milestone**: 8 complete phases (2,3,4,5,6 partial,7 partial,8,9,10 partial) + 18 production-ready modules!
+- ✅ **Deployment Runbooks** (`docs/DEPLOYMENT_RUNBOOK.md`)
+  - Complete operational procedures for production deployment
+  - Initial deployment guide (10 steps, ~31 minutes)
+  - Upgrade procedures with rollback plan
+  - Database operations (backup, restore, maintenance)
+  - TLS certificate management
+  - Monitoring setup (Prometheus, Grafana, alerts)
+  - Performance tuning guidelines
+  - Incident response procedures
+  - Maintenance window templates
+- ✅ **Fuzzing Infrastructure** (`tests/fuzz_*.zig`, `docs/FUZZING.md`)
+  - SMTP protocol fuzzing harness (`fuzz_smtp_protocol.zig`)
+  - MIME parser fuzzing harness (`fuzz_mime_parser.zig`)
+  - Comprehensive fuzzing documentation
+  - libFuzzer and AFL integration guides
+  - Seed corpus generation
+  - CI/CD fuzzing workflow examples
+  - OSS-Fuzz integration documentation
+- 🎉 **Major Milestone**: 9 complete phases (2,3,4,5,6 partial,7,8,9,10) + 21 production-ready modules!
 
 ### v0.27.0 (2025-10-24) - Code Quality Improvements & Input Validation 🛡️
 - ✅ **Email Validator**: Comprehensive RFC-compliant email address validator
@@ -1227,8 +1245,8 @@
 ### Phase 7: Testing & Quality ✅ COMPLETED (2025-10-24)
 - [x] **Security Test Suite**: Create OWASP-based security tests in `tests/security_test.zig` ✅ (35+ OWASP tests covering injection, DoS, access control)
 - [x] **Error Path Testing**: Add tests for failures (DB, network, allocation, timeout) ✅ (`tests/error_path_test.zig` - 40+ error scenarios documented)
+- [x] **Fuzzing Harnesses**: Add structured fuzzing for email, MIME, header parsers ✅ (`tests/fuzz_smtp_protocol.zig`, `tests/fuzz_mime_parser.zig`, `docs/FUZZING.md`)
 - [ ] **Load Testing**: Implement 10k+ concurrent connection tests
-- [ ] **Fuzzing Harnesses**: Add structured fuzzing for email, MIME, header parsers
 - [ ] **Coverage Measurement**: Add coverage tracking and enforce minimum thresholds
 - [ ] **Chaos Engineering**: Add fault injection tests for resilience
 - [ ] **Regression Test Index**: Document past vulnerabilities with test references
@@ -1253,13 +1271,14 @@
 
 ### Phase 10: Documentation Improvements
 - [x] **API Reference Documentation**: Complete REST API documentation ✅ (`docs/API_REFERENCE.md` - Comprehensive reference for all endpoints with examples)
-- [ ] **OpenAPI Specification**: Add Swagger/OpenAPI docs for REST API
 - [x] **Database Schema Docs**: Document schema, migrations, maintenance in `docs/DATABASE.md` ✅ (Comprehensive guide with schema, migrations, maintenance, troubleshooting)
-- [ ] **Deployment Runbooks**: Create step-by-step operational procedures
+- [x] **Deployment Runbooks**: Create step-by-step operational procedures ✅ (`docs/DEPLOYMENT_RUNBOOK.md` - Complete production deployment, upgrade, rollback, monitoring procedures)
 - [x] **Troubleshooting Guide**: Document common errors and solutions ✅ (`docs/TROUBLESHOOTING.md` - Complete guide with diagnostics and solutions)
+- [x] **Configuration Reference**: Complete reference with defaults and tuning guidance ✅ (`docs/CONFIGURATION.md` - Enhanced with profile comparison table, environment variable reference, tuning recommendations for different deployment sizes)
+- [x] **Fuzzing Documentation**: Document fuzzing setup and procedures ✅ (`docs/FUZZING.md` - libFuzzer, AFL, OSS-Fuzz integration guides)
+- [ ] **OpenAPI Specification**: Add Swagger/OpenAPI docs for REST API
 - [ ] **Algorithm Documentation**: Add detailed comments to SPF, cluster, encryption logic
 - [ ] **Architecture Decision Records**: Create `docs/ADR/` with design rationale
-- [x] **Configuration Reference**: Complete reference with defaults and tuning guidance ✅ (`docs/CONFIGURATION.md` - Enhanced with profile comparison table, environment variable reference, tuning recommendations for different deployment sizes)
 
 ### Phase 11: Enterprise Features
 - [ ] **Audit Trail**: Log all administrative actions (user CRUD, config changes, ACL)
@@ -1280,7 +1299,7 @@
 - [x] Fix MIME header validation - Add length checks (2 hours) ✅ (Implemented MAX_LINE_LENGTH validation)
 - [x] Add per-username rate limiting - Extend current limiter (1 hour) ✅ (Already implemented with checkAndIncrementUser)
 - [x] Add JSON structured logging - Wrap current logging (2 hours) ✅ (`src/core/logger.zig` with profile-based config, `src/core/config.zig:48,257,384-387`, `src/main.zig:55`)
-- [ ] Add fuzzing harnesses - For protocol parsing (2 hours)
+- [x] Add fuzzing harnesses - For protocol parsing (2 hours) ✅ (`tests/fuzz_smtp_protocol.zig`, `tests/fuzz_mime_parser.zig`, `docs/FUZZING.md`)
 
 ## Future Ideas 💡
 
