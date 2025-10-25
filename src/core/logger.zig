@@ -55,7 +55,7 @@ pub const Logger = struct {
         }
 
         // Get hostname
-        var hostname_buf: [256]u8 = undefined;
+        var hostname_buf: [std.posix.HOST_NAME_MAX]u8 = undefined;
         const hostname = std.posix.gethostname(&hostname_buf) catch "unknown";
 
         return Logger{
@@ -140,7 +140,7 @@ pub const Logger = struct {
         var writer = stream.writer();
 
         try writer.writeAll("{\"timestamp\":");
-        try std.fmt.formatInt(timestamp, 10, .lower, .{}, writer);
+        try writer.print("{d}", .{timestamp});
         try writer.writeAll(",\"level\":\"");
         try writer.writeAll(level.toString());
         try writer.writeAll("\",\"service\":\"");

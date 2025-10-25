@@ -11,11 +11,15 @@ pub const RateLimiter = struct {
     mutex: std.Thread.Mutex,
     cleanup_thread: ?std.Thread,
     should_stop: std.atomic.Value(bool),
+    // Bucket-based tracking for O(1) cleanup
+    time_buckets: std.AutoHashMap(i64, std.ArrayList([]const u8)),
+    bucket_size_seconds: u64,
 
     const RateCounter = struct {
         count: u32,
         window_start: i64,
         last_request: i64,
+        bucket_key: i64, // Which time bucket this entry belongs to
     };
 
     pub fn init(allocator: std.mem.Allocator, window_seconds: u64, max_requests: u32, max_requests_per_user: u32, cleanup_interval_seconds: u64) RateLimiter {
@@ -30,7 +34,14 @@ pub const RateLimiter = struct {
             .mutex = std.Thread.Mutex{},
             .cleanup_thread = null,
             .should_stop = std.atomic.Value(bool).init(false),
+            .time_buckets = std.AutoHashMap(i64, std.ArrayList([]const u8)).init(allocator),
+            .bucket_size_seconds = window_seconds * 2, // Buckets are 2x window size
         };
+    }
+
+    /// Calculate which time bucket a timestamp belongs to
+    fn getBucketKey(self: *RateLimiter, timestamp: i64) i64 {
+        return @divFloor(timestamp, @as(i64, @intCast(self.bucket_size_seconds)));
     }
 
     /// Start automatic cleanup in background thread
@@ -88,6 +99,13 @@ pub const RateLimiter = struct {
             self.allocator.free(entry.key_ptr.*);
         }
         self.user_counters.deinit();
+
+        // Clean up time buckets
+        var bucket_it = self.time_buckets.iterator();
+        while (bucket_it.next()) |entry| {
+            entry.value_ptr.deinit(self.allocator);
+        }
+        self.time_buckets.deinit();
     }
 
     pub fn checkAndIncrement(self: *RateLimiter, ip: []const u8) !bool {
@@ -95,40 +113,67 @@ pub const RateLimiter = struct {
         defer self.mutex.unlock();
 
         const now = std.time.timestamp();
+        const bucket_key = self.getBucketKey(now);
 
         if (self.ip_counters.get(ip)) |counter| {
             const elapsed = now - counter.window_start;
 
             if (elapsed >= self.window_seconds) {
-                // Reset window
+                // Reset window - update bucket tracking
+                try self.addToBucket(bucket_key, ip);
                 try self.ip_counters.put(ip, RateCounter{
                     .count = 1,
                     .window_start = now,
                     .last_request = now,
+                    .bucket_key = bucket_key,
                 });
                 return true;
             } else if (counter.count >= self.max_requests) {
                 // Rate limit exceeded
                 return false;
             } else {
-                // Increment counter
+                // Increment counter - update bucket if changed
+                if (counter.bucket_key != bucket_key) {
+                    try self.addToBucket(bucket_key, ip);
+                }
                 try self.ip_counters.put(ip, RateCounter{
                     .count = counter.count + 1,
                     .window_start = counter.window_start,
                     .last_request = now,
+                    .bucket_key = bucket_key,
                 });
                 return true;
             }
         } else {
-            // New IP
+            // New IP - add to bucket
             const ip_copy = try self.allocator.dupe(u8, ip);
+            try self.addToBucket(bucket_key, ip_copy);
             try self.ip_counters.put(ip_copy, RateCounter{
                 .count = 1,
                 .window_start = now,
                 .last_request = now,
+                .bucket_key = bucket_key,
             });
             return true;
         }
+    }
+
+    /// Add an IP/user to a time bucket for efficient cleanup
+    fn addToBucket(self: *RateLimiter, bucket_key: i64, identifier: []const u8) !void {
+        const bucket_result = try self.time_buckets.getOrPut(bucket_key);
+        if (!bucket_result.found_existing) {
+            // In Zig 0.15, ArrayList is initialized with {} instead of init()
+            bucket_result.value_ptr.* = .{};
+        }
+
+        // Only add if not already in bucket
+        for (bucket_result.value_ptr.items) |item| {
+            if (std.mem.eql(u8, item, identifier)) {
+                return;
+            }
+        }
+
+        try bucket_result.value_ptr.append(self.allocator, identifier);
     }
 
     /// Check and increment rate limit for authenticated user
@@ -137,16 +182,19 @@ pub const RateLimiter = struct {
         defer self.mutex.unlock();
 
         const now = std.time.timestamp();
+        const bucket_key = self.getBucketKey(now);
 
         if (self.user_counters.get(user)) |counter| {
             const elapsed = now - counter.window_start;
 
             if (elapsed >= self.window_seconds) {
                 // Reset window
+                try self.addToBucket(bucket_key, user);
                 try self.user_counters.put(user, RateCounter{
                     .count = 1,
                     .window_start = now,
                     .last_request = now,
+                    .bucket_key = bucket_key,
                 });
                 return true;
             } else if (counter.count >= self.max_requests_per_user) {
@@ -154,20 +202,26 @@ pub const RateLimiter = struct {
                 return false;
             } else {
                 // Increment counter
+                if (counter.bucket_key != bucket_key) {
+                    try self.addToBucket(bucket_key, user);
+                }
                 try self.user_counters.put(user, RateCounter{
                     .count = counter.count + 1,
                     .window_start = counter.window_start,
                     .last_request = now,
+                    .bucket_key = bucket_key,
                 });
                 return true;
             }
         } else {
             // New user
             const user_copy = try self.allocator.dupe(u8, user);
+            try self.addToBucket(bucket_key, user_copy);
             try self.user_counters.put(user_copy, RateCounter{
                 .count = 1,
                 .window_start = now,
                 .last_request = now,
+                .bucket_key = bucket_key,
             });
             return true;
         }
@@ -217,46 +271,43 @@ pub const RateLimiter = struct {
     }
 
     /// Clean up old rate limit entries (call periodically)
+    /// O(1) cleanup using bucket-based approach instead of O(n) iteration
     pub fn cleanup(self: *RateLimiter) void {
         self.mutex.lock();
         defer self.mutex.unlock();
 
         const now = std.time.timestamp();
-        var to_remove = std.ArrayList([]const u8).init(self.allocator);
-        defer to_remove.deinit();
 
-        // Clean up IP counters
-        var ip_it = self.ip_counters.iterator();
-        while (ip_it.next()) |entry| {
-            const elapsed = now - entry.value_ptr.last_request;
-            // Remove entries that haven't been accessed in 2x the window time
-            if (elapsed >= @as(i64, @intCast(self.window_seconds * 2))) {
-                to_remove.append(entry.key_ptr.*) catch continue;
+        // Calculate cutoff bucket - anything before this should be removed
+        const cutoff_time = now - @as(i64, @intCast(self.window_seconds * 2));
+        const cutoff_bucket = self.getBucketKey(cutoff_time);
+
+        var buckets_to_remove = std.ArrayList(i64).init(self.allocator);
+        defer buckets_to_remove.deinit();
+
+        // Identify old buckets for removal
+        var bucket_it = self.time_buckets.iterator();
+        while (bucket_it.next()) |entry| {
+            if (entry.key_ptr.* < cutoff_bucket) {
+                buckets_to_remove.append(entry.key_ptr.*) catch continue;
             }
         }
 
-        for (to_remove.items) |key| {
-            if (self.ip_counters.fetchRemove(key)) |removed| {
-                self.allocator.free(removed.key);
-            }
-        }
-
-        // Clear for user counters cleanup
-        to_remove.clearRetainingCapacity();
-
-        // Clean up user counters
-        var user_it = self.user_counters.iterator();
-        while (user_it.next()) |entry| {
-            const elapsed = now - entry.value_ptr.last_request;
-            // Remove entries that haven't been accessed in 2x the window time
-            if (elapsed >= @as(i64, @intCast(self.window_seconds * 2))) {
-                to_remove.append(entry.key_ptr.*) catch continue;
-            }
-        }
-
-        for (to_remove.items) |key| {
-            if (self.user_counters.fetchRemove(key)) |removed| {
-                self.allocator.free(removed.key);
+        // Remove old entries from old buckets
+        for (buckets_to_remove.items) |bucket_key| {
+            if (self.time_buckets.fetchRemove(bucket_key)) |removed_bucket| {
+                // Remove all IPs/users in this bucket from counters
+                for (removed_bucket.value.items) |identifier| {
+                    // Check if it's still in IP counters
+                    if (self.ip_counters.fetchRemove(identifier)) |removed_ip| {
+                        self.allocator.free(removed_ip.key);
+                    }
+                    // Check if it's still in user counters
+                    if (self.user_counters.fetchRemove(identifier)) |removed_user| {
+                        self.allocator.free(removed_user.key);
+                    }
+                }
+                removed_bucket.value.deinit(self.allocator);
             }
         }
     }
